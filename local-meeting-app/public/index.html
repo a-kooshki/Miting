@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Graph | مینیمال میتینگ</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell minimal-shell">
+      <header class="hero minimal-hero">
+        <div>
+          <span class="badge">Graph • Offline LAN</span>
+          <h1>Graph</h1>
+          <p>پلتفرم جلسه صوتی/تصویری داخلی با معماری مستقل از اینترنت جهانی، طراحی مینیمال و امنیت چندلایه.</p>
+        </div>
+        <div class="hero-card">
+          <h2>نسخه جدید</h2>
+          <ul>
+            <li>فرانت‌اند بازطراحی‌شده با سبک مینیمالیسم</li>
+            <li>بک‌اند متمرکز بر شبکه داخلی و API امنیتی</li>
+            <li>جلسه تصویری، صوتی، اشتراک صفحه و چت</li>
+            <li>اجرای کامل روی LAN بدون سرویس خارجی</li>
+          </ul>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="card">
+          <h2>ساخت اتاق جدید</h2>
+          <form id="createRoomForm" class="stack">
+            <label><span>نام شما</span><input type="text" name="ownerName" required /></label>
+            <label><span>عنوان جلسه</span><input type="text" name="roomTitle" required /></label>
+            <label><span>رمز جلسه</span><input type="password" name="roomPassword" minlength="6" required /></label>
+            <button type="submit">ایجاد اتاق</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <h2>ورود به اتاق</h2>
+          <form id="joinRoomForm" class="stack">
+            <label><span>نام شما</span><input type="text" name="userName" required /></label>
+            <label><span>کد اتاق</span><input type="text" name="roomCode" maxlength="16" autocomplete="off" required /></label>
+            <label><span>رمز جلسه</span><input type="password" name="roomPassword" minlength="6" required /></label>
+            <button type="submit" class="secondary">ورود به جلسه</button>
+          </form>
+        </section>
+
+        <section class="card wide" id="statusCard">
+          <h2>وضعیت Graph</h2>
+          <p id="statusText">سامانه آماده ایجاد جلسه امن داخلی است.</p>
+          <p id="secureHint" class="hint-text"></p>
+          <p id="encryptionHint" class="hint-text"></p>
+          <p id="inviteHint" class="hint-text"></p>
+          <div class="tips-row" id="securityFacts"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

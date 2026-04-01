@@ -8,6 +8,13 @@ const ownerNameInput = createRoomForm.elements.ownerName;
 const joinUserNameInput = joinRoomForm.elements.userName;
 const roomCodeInput = joinRoomForm.elements.roomCode;
 const roomPasswordInput = joinRoomForm.elements.roomPassword;
+const createResult = document.getElementById("createResult");
+const createdRoomMeta = document.getElementById("createdRoomMeta");
+const createdInviteLink = document.getElementById("createdInviteLink");
+const copyCreatedInviteBtn = document.getElementById("copyCreatedInviteBtn");
+const enterCreatedRoomBtn = document.getElementById("enterCreatedRoomBtn");
+const sharedRoomPreview = document.getElementById("sharedRoomPreview");
+const sharedRoomTitle = document.getElementById("sharedRoomTitle");
 const STORAGE_KEYS = {
   name: "meetingDisplayName",
   roomCode: "meetingLastRoomCode"
@@ -49,6 +56,26 @@ function getSharedRoomCode() {
   return String(params.get("code") || "").trim().toUpperCase();
 }
 
+function saveMeetingSession(payload) {
+  sessionStorage.setItem("meetingSession", JSON.stringify(payload));
+}
+
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return true;
+  }
+  const textArea = document.createElement("textarea");
+  textArea.value = value;
+  textArea.setAttribute("readonly", "true");
+  textArea.className = "copy-fallback";
+  document.body.appendChild(textArea);
+  textArea.select();
+  const copied = document.execCommand("copy");
+  textArea.remove();
+  return copied;
+}
+
 function hydrateForms() {
   const savedName = localStorage.getItem(STORAGE_KEYS.name) || "";
   const savedRoomCode = getSharedRoomCode() || localStorage.getItem(STORAGE_KEYS.roomCode) || "";
@@ -60,6 +87,22 @@ function hydrateForms() {
   if (getSharedRoomCode()) {
     roomCodeInput.readOnly = true;
     inviteHint.textContent = `لینک دعوت باز شده است. کد اتاق ${savedRoomCode} به صورت خودکار وارد شد.`;
+  }
+}
+
+async function loadSharedRoomPreview() {
+  const sharedCode = getSharedRoomCode();
+  if (!sharedCode) {
+    sharedRoomPreview.hidden = true;
+    return;
+  }
+  sharedRoomPreview.hidden = false;
+  sharedRoomTitle.textContent = "در حال دریافت اطلاعات اتاق...";
+  try {
+    const data = await api(`/api/rooms/preview?roomCode=${encodeURIComponent(sharedCode)}`);
+    sharedRoomTitle.textContent = `${data.room.title} (${data.room.code})`;
+  } catch (error) {
+    sharedRoomTitle.textContent = "اتاق پیدا نشد یا لینک معتبر نیست.";
   }
 }
 
@@ -119,16 +162,16 @@ createRoomForm.addEventListener("submit", async (event) => {
     });
 
     rememberUser(data.owner.name, data.room.code);
-    sessionStorage.setItem(
-      "meetingSession",
-      JSON.stringify({
-        roomCode: data.room.code,
-        userName: data.owner.name,
-        roomPassword
-      })
-    );
-    setStatus(`اتاق ساخته شد. کد اتاق: ${data.room.code}`, "status-success");
-    window.location.href = `/room.html?code=${encodeURIComponent(data.room.code)}`;
+    saveMeetingSession({
+      roomCode: data.room.code,
+      userName: data.owner.name,
+      roomPassword
+    });
+    const inviteUrl = `${location.origin}/?code=${encodeURIComponent(data.room.code)}`;
+    createdRoomMeta.textContent = `${data.room.title} • کد ${data.room.code}`;
+    createdInviteLink.value = inviteUrl;
+    createResult.hidden = false;
+    setStatus("اتاق ساخته شد. لینک دعوت را کپی کنید و رمز را جداگانه بفرستید.", "status-success");
   } catch (error) {
     setStatus(error.message, "status-error");
   } finally {
@@ -149,14 +192,11 @@ joinRoomForm.addEventListener("submit", async (event) => {
   }
 
   rememberUser(userName, roomCode);
-  sessionStorage.setItem(
-    "meetingSession",
-    JSON.stringify({
-      roomCode,
-      userName,
-      roomPassword
-    })
-  );
+  saveMeetingSession({
+    roomCode,
+    userName,
+    roomPassword
+  });
   setFormPending(joinRoomForm, true);
   setStatus("در حال ورود به جلسه...", "");
   window.location.href = `/room.html?code=${encodeURIComponent(roomCode)}`;
@@ -166,5 +206,24 @@ roomCodeInput.addEventListener("input", () => {
   roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9-]/g, "");
 });
 
+copyCreatedInviteBtn?.addEventListener("click", async () => {
+  try {
+    const copied = await copyText(createdInviteLink.value);
+    setStatus(copied ? "لینک دعوت کپی شد." : "کپی خودکار ممکن نشد؛ لینک را دستی کپی کنید.", copied ? "status-success" : "status-error");
+  } catch (error) {
+    setStatus("کپی لینک با خطا مواجه شد.", "status-error");
+  }
+});
+
+enterCreatedRoomBtn?.addEventListener("click", () => {
+  const session = JSON.parse(sessionStorage.getItem("meetingSession") || "{}");
+  if (!session.roomCode) {
+    setStatus("اطلاعات اتاق پیدا نشد. دوباره اتاق بسازید.", "status-error");
+    return;
+  }
+  window.location.href = `/room.html?code=${encodeURIComponent(session.roomCode)}`;
+});
+
 hydrateForms();
 loadConfigNotice();
+loadSharedRoomPreview();

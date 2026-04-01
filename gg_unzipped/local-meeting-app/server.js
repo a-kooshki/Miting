@@ -638,6 +638,23 @@ async function handleApi(request, response, urlObject) {
     return;
   }
 
+  if (request.method === "GET" && pathname === "/api/rooms/preview") {
+    const roomCode = normalizeRoomCode(searchParams.get("roomCode"));
+    assert(roomCode, "کد اتاق معتبر نیست.");
+    const room = await getRoomByCode(roomCode);
+    if (!room) {
+      sendJson(response, 404, { error: "اتاق پیدا نشد." });
+      return;
+    }
+    sendJson(response, 200, {
+      room: {
+        code: room.code,
+        title: room.title
+      }
+    });
+    return;
+  }
+
   if (request.method === "POST" && pathname === "/api/rooms") {
     const body = await parseBody(request);
     const ownerName = normalizeName(body.ownerName, "Guest");

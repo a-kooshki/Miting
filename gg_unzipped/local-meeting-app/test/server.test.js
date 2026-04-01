@@ -104,6 +104,13 @@ test('create room and join works with the same room password', async () => {
     const created = await createResponse.json();
     const roomCode = created?.room?.code;
     assert.ok(roomCode);
+    assert.ok(created?.room?.title);
+
+    const previewResponse = await fetch(`${baseUrl}/api/rooms/preview?roomCode=${encodeURIComponent(roomCode)}`);
+    assert.equal(previewResponse.status, 200);
+    const preview = await previewResponse.json();
+    assert.equal(preview?.room?.code, roomCode);
+    assert.equal(preview?.room?.title, created.room.title);
 
     const joinResponse = await fetch(`${baseUrl}/api/rooms/join`, {
       method: 'POST',

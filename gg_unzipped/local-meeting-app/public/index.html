@@ -47,11 +47,24 @@
             </label>
             <button type="submit">ایجاد اتاق</button>
           </form>
+          <div id="createResult" class="invite-result" hidden>
+            <h3>اتاق شما آماده است</h3>
+            <p id="createdRoomMeta"></p>
+            <div class="invite-link-row">
+              <input id="createdInviteLink" type="text" readonly />
+              <button id="copyCreatedInviteBtn" type="button" class="secondary">کپی لینک</button>
+            </div>
+            <button id="enterCreatedRoomBtn" type="button">ورود به اتاق</button>
+          </div>
         </section>
 
         <section class="card">
           <h2>ورود به اتاق</h2>
           <p class="section-copy">اگر کد اتاق را از همکار خود گرفته‌اید، آن را اینجا وارد کنید. حروف کوچک خودکار اصلاح می‌شوند.</p>
+          <div id="sharedRoomPreview" class="shared-room-preview" hidden>
+            <strong>دعوت‌نامه جلسه</strong>
+            <p id="sharedRoomTitle">در حال دریافت اطلاعات اتاق...</p>
+          </div>
           <form id="joinRoomForm" class="stack">
             <label>
               <span>نام شما</span>

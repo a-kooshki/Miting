@@ -1,0 +1,26 @@
+[req]
+default_bits = 2048
+prompt = no
+default_md = sha256
+x509_extensions = v3_req
+distinguished_name = dn
+
+[dn]
+C = IR
+ST = Tehran
+L = Tehran
+O = Cyphrograph
+OU = Local Meeting
+CN = cyphrograph.ir
+
+[v3_req]
+subjectAltName = @alt_names
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+
+[alt_names]
+DNS.1 = cyphrograph.ir
+DNS.2 = www.cyphrograph.ir
+DNS.3 = localhost
+IP.1 = 127.0.0.1

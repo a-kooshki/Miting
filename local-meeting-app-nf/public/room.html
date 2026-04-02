@@ -7,6 +7,12 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="room-body">
+    <div id="connectionLoader" class="connection-loader">
+      <div class="loader-card">
+        <strong>در حال برقراری اتصال کامل جلسه...</strong>
+        <span>لطفاً چند لحظه صبر کنید.</span>
+      </div>
+    </div>
     <div class="room-shell">
       <aside class="sidebar card">
         <div class="room-header">
@@ -41,10 +47,10 @@
         </div>
 
         <div class="controls">
-          <button id="toggleAudioBtn">میکروفون</button>
-          <button id="toggleVideoBtn">دوربین</button>
+          <button id="toggleAudioBtn" disabled>میکروفون</button>
+          <button id="toggleVideoBtn" disabled>دوربین</button>
           <button id="shareScreenBtn" class="secondary">اشتراک صفحه</button>
-          <button id="retryMediaBtn" class="ghost">تلاش دوباره برای رسانه</button>
+          <button id="retryMediaBtn" class="ghost">فعال‌سازی دوربین/میکروفون</button>
         </div>
 
         <section>

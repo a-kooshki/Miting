@@ -231,6 +231,34 @@ input:disabled {
   overflow: hidden;
 }
 
+.connection-loader {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.72);
+  z-index: 1000;
+}
+
+.connection-loader.hidden {
+  display: none;
+}
+
+.loader-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  min-width: 280px;
+  text-align: center;
+  display: grid;
+  gap: 8px;
+}
+
+.loader-card span {
+  color: var(--muted);
+}
+
 .room-shell {
   display: grid;
   grid-template-columns: 340px 1fr;

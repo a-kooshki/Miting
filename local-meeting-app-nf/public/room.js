@@ -18,7 +18,8 @@ const state = {
   config: null,
   joined: false,
   messagesLoaded: false,
-  renderedMessageCount: 0
+  renderedMessageCount: 0,
+  connectionReady: false
 };
 
 const roomTitleEl = document.getElementById("roomTitle");
@@ -42,9 +43,18 @@ const copyInviteBtn = document.getElementById("copyInviteBtn");
 const inviteLinkText = document.getElementById("inviteLinkText");
 const secureStateBadge = document.getElementById("secureStateBadge");
 const openSecureBtn = document.getElementById("openSecureBtn");
+const connectionLoader = document.getElementById("connectionLoader");
 
 function setHint(text) {
   connectionHint.textContent = text;
+}
+
+function setConnectionLoader(loading) {
+  if (!connectionLoader) {
+    return;
+  }
+
+  connectionLoader.classList.toggle("hidden", !loading);
 }
 
 function persistSession() {
@@ -121,6 +131,10 @@ function setMediaButtonsState() {
       ? "قطع دوربین"
       : "وصل دوربین"
     : "دوربین ندارد";
+
+  retryMediaBtn.textContent = state.localStream
+    ? "اتصال دوباره دوربین/میکروفون"
+    : "فعال‌سازی دوربین/میکروفون";
 }
 
 function explainMediaError(error, featureName) {
@@ -350,6 +364,20 @@ function buildPeerConnection(remoteParticipant, shouldInitiate) {
     }
 
     await sendSignal("ice-candidate", remoteParticipant.sessionId, event.candidate);
+  };
+
+  peer.onnegotiationneeded = async () => {
+    if (!state.connectionReady || !state.participant) {
+      return;
+    }
+    if (peer.signalingState !== "stable") {
+      return;
+    }
+    try {
+      await createOffer(remoteParticipant.sessionId);
+    } catch (error) {
+      console.error("Negotiation error", error);
+    }
   };
 
   peer.onconnectionstatechange = () => {
@@ -780,6 +808,7 @@ async function init() {
   }
 
   await ensureConfig();
+  setConnectionLoader(true);
   updateSecureBadge();
   renderSecureAction();
   setInviteLink();
@@ -791,12 +820,13 @@ async function init() {
     setHint("هشدار: این صفحه با HTTP باز شده و مرورگر ممکن است دوربین، میکروفون و اشتراک صفحه را کاملاً مسدود کند.");
   }
 
-  await setupLocalMedia();
   await joinRoom();
   await refreshRoom();
-  if (!state.localStream) {
-    setHint("بدون رسانه زنده وارد شدید؛ چت فعال است و بعداً می‌توانید مجوز رسانه را بدهید.");
-  }
+  await pollSignals();
+  state.connectionReady = true;
+  setConnectionLoader(false);
+  setMediaButtonsState();
+  setHint("اتصال جلسه کامل شد. در صورت نیاز دوربین و میکروفون را فعال کنید.");
 
   state.refreshTimer = setInterval(refreshRoom, 2500);
   state.signalTimer = setInterval(pollSignals, 1200);
@@ -814,5 +844,6 @@ openSecureBtn?.addEventListener("click", () => {
 });
 
 init().catch((error) => {
+  setConnectionLoader(false);
   setHint(error.message);
 });

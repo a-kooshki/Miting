@@ -45,6 +45,10 @@ const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 10_000);
 const RATE_LIMIT_MAX_REQUESTS = Number(process.env.RATE_LIMIT_MAX_REQUESTS || 120);
 const RATE_LIMIT_MAX_POSTS = Number(process.env.RATE_LIMIT_MAX_POSTS || 50);
 const rateLimitStore = new Map();
+const ROOM_JOIN_ATTEMPT_WINDOW_MS = Number(process.env.ROOM_JOIN_ATTEMPT_WINDOW_MS || 10 * 60_000);
+const ROOM_JOIN_MAX_FAILED_ATTEMPTS = Number(process.env.ROOM_JOIN_MAX_FAILED_ATTEMPTS || 8);
+const failedRoomJoinStore = new Map();
+const PASSWORD_PEPPER = process.env.PASSWORD_PEPPER || "";
 
 async function ensureStorage() {
   await fsp.mkdir(DATA_DIR, { recursive: true });
@@ -132,6 +136,9 @@ function setSecurityHeaders(response, isSecure = false) {
   response.setHeader("Referrer-Policy", "no-referrer");
   response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  response.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  response.setHeader("Permissions-Policy", "camera=(self), microphone=(self), display-capture=(self)");
+  response.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
   if (isSecure) {
     response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
@@ -226,6 +233,15 @@ function normalizeName(value, fallback) {
 function normalizePassword(value) {
   return String(value || "").trim().slice(0, 120);
 }
+function isStrongPassword(value) {
+  const password = String(value || "");
+  return (
+    password.length >= 8 &&
+    /[A-Z]/i.test(password) &&
+    /\d/.test(password) &&
+    /[^A-Za-z0-9]/.test(password)
+  );
+}
 
 function normalizeRoomCode(value) {
   return String(value || "")
@@ -305,7 +321,7 @@ function buildParticipantToken() {
 }
 
 function hashRoomPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  const hash = crypto.scryptSync(`${password}${PASSWORD_PEPPER}`, salt, 64).toString("hex");
   return `${salt}:${hash}`;
 }
 
@@ -317,7 +333,7 @@ function verifyRoomPassword(password, passwordHash) {
   if (!salt || !expectedHash) {
     return false;
   }
-  const actualHash = crypto.scryptSync(password, salt, 64).toString("hex");
+  const actualHash = crypto.scryptSync(`${password}${PASSWORD_PEPPER}`, salt, 64).toString("hex");
   const expectedBuffer = Buffer.from(expectedHash, "hex");
   const actualBuffer = Buffer.from(actualHash, "hex");
   if (expectedBuffer.length !== actualBuffer.length) {
@@ -357,6 +373,45 @@ function isRateLimited(request) {
   rateLimitStore.set(ip, bucket);
 
   return bucket.requests > RATE_LIMIT_MAX_REQUESTS || bucket.postRequests > RATE_LIMIT_MAX_POSTS;
+}
+
+function getJoinAttemptKey(request, roomCode) {
+  return `${getClientIp(request)}:${normalizeRoomCode(roomCode)}`;
+}
+
+function isRoomJoinBlocked(request, roomCode) {
+  const key = getJoinAttemptKey(request, roomCode);
+  const entry = failedRoomJoinStore.get(key);
+  if (!entry) {
+    return false;
+  }
+
+  if (Date.now() > entry.resetAt) {
+    failedRoomJoinStore.delete(key);
+    return false;
+  }
+
+  return entry.attempts >= ROOM_JOIN_MAX_FAILED_ATTEMPTS;
+}
+
+function registerFailedRoomJoin(request, roomCode) {
+  const key = getJoinAttemptKey(request, roomCode);
+  const now = Date.now();
+  const entry = failedRoomJoinStore.get(key);
+  if (!entry || now > entry.resetAt) {
+    failedRoomJoinStore.set(key, {
+      attempts: 1,
+      resetAt: now + ROOM_JOIN_ATTEMPT_WINDOW_MS
+    });
+    return;
+  }
+
+  entry.attempts += 1;
+  failedRoomJoinStore.set(key, entry);
+}
+
+function clearFailedRoomJoin(request, roomCode) {
+  failedRoomJoinStore.delete(getJoinAttemptKey(request, roomCode));
 }
 
 function validateParticipant(room, sessionId, authToken) {
@@ -638,7 +693,7 @@ async function handleApi(request, response, urlObject) {
     const roomPassword = normalizePassword(body.roomPassword);
     assert(ownerName, "نام سازنده لازم است.");
     assert(roomTitle, "عنوان جلسه لازم است.");
-    assert(roomPassword.length >= 4, "رمز روم باید حداقل ۴ کاراکتر باشد.");
+    assert(isStrongPassword(roomPassword), "رمز روم باید حداقل ۸ کاراکتر و شامل حرف، عدد و نماد باشد.");
     const { room, owner } = await createRoom(ownerName, roomTitle, roomPassword);
     sendJson(response, 201, { room: sanitizeRoomForClient(room), owner });
     return;
@@ -649,11 +704,16 @@ async function handleApi(request, response, urlObject) {
     assert(normalizeRoomCode(body.roomCode), "کد اتاق معتبر نیست.");
     assert(normalizeName(body.userName, ""), "نام کاربر لازم است.");
     const roomPassword = normalizePassword(body.roomPassword);
-    assert(roomPassword.length >= 4, "رمز روم لازم است.");
+    assert(roomPassword.length >= 8, "رمز روم معتبر نیست.");
+    if (isRoomJoinBlocked(request, body.roomCode)) {
+      sendJson(response, 429, { error: "تلاش‌های ناموفق زیاد بوده است. چند دقیقه دیگر دوباره تلاش کنید." });
+      return;
+    }
     const result = await joinRoom(body.roomCode, body.userName, roomPassword);
 
     if (result.error) {
       if (result.error === "invalid_password") {
+        registerFailedRoomJoin(request, body.roomCode);
         sendJson(response, 403, { error: "رمز روم نادرست است." });
         return;
       }
@@ -665,6 +725,7 @@ async function handleApi(request, response, urlObject) {
       return;
     }
 
+    clearFailedRoomJoin(request, body.roomCode);
     sendJson(response, 200, result);
     return;
   }

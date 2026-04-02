@@ -35,6 +35,10 @@ form.addEventListener("submit", async (event) => {
   const userName = String(formData.get("userName") || "").trim();
   const roomCode = String(formData.get("roomCode") || "").trim().toUpperCase();
   const roomPassword = String(formData.get("roomPassword") || "").trim();
+  if (roomPassword.length < 8) {
+    setStatus("رمز روم باید حداقل ۸ کاراکتر باشد.", "status-error");
+    return;
+  }
 
   try {
     setStatus("در حال بررسی و ورود...");
@@ -49,8 +53,7 @@ form.addEventListener("submit", async (event) => {
         roomCode,
         userName,
         authToken: data.authToken,
-        participantSessionId: data.participant?.sessionId,
-        roomPassword
+        participantSessionId: data.participant?.sessionId
       })
     );
 

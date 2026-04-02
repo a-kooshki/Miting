@@ -63,7 +63,8 @@ function persistSession() {
     JSON.stringify({
       roomCode,
       userName,
-      authToken: state.authToken
+      authToken: state.authToken,
+      participantSessionId: state.participant?.sessionId
     })
   );
 }
@@ -581,25 +582,6 @@ async function refreshRoom() {
   }
 }
 
-async function joinRoom() {
-  const data = await api("/api/rooms/join", {
-    method: "POST",
-    body: JSON.stringify({
-      roomCode,
-      userName,
-      roomPassword: sessionSeed.roomPassword || ""
-    })
-  });
-
-  state.room = data.room;
-  state.participant = data.participant;
-  state.authToken = data.authToken || sessionSeed.authToken || "";
-  state.joined = true;
-  state.participants = data.room.participants || [];
-  persistSession();
-  renderParticipants();
-}
-
 function replaceOutgoingStream(stream) {
   state.localStream?.getTracks().forEach((track) => {
     if (track.readyState !== "ended") {
@@ -767,6 +749,7 @@ leaveBtn.addEventListener("click", async () => {
     state.peerConnections.forEach((peer) => peer.close());
     state.localStream?.getTracks().forEach((track) => track.stop());
     state.screenStream?.getTracks().forEach((track) => track.stop());
+    sessionStorage.removeItem("meetingSession");
     window.location.href = "/";
   }
 });
@@ -802,7 +785,7 @@ window.addEventListener("online", () => {
 });
 
 async function init() {
-  if (!roomCode || !userName || !sessionSeed.roomPassword) {
+  if (!roomCode || !userName || !sessionSeed.authToken || !sessionSeed.participantSessionId) {
     window.location.href = `/join-room.html?code=${encodeURIComponent(roomCode || "")}`;
     return;
   }
@@ -815,12 +798,17 @@ async function init() {
   toggleEmptyRemoteState();
   roomCodeBadgeEl.textContent = roomCode;
   currentUserNameEl.textContent = userName;
+  state.authToken = sessionSeed.authToken;
+  state.participant = {
+    sessionId: sessionSeed.participantSessionId,
+    name: userName
+  };
+  state.joined = true;
 
   if (!window.isSecureContext) {
     setHint("هشدار: این صفحه با HTTP باز شده و مرورگر ممکن است دوربین، میکروفون و اشتراک صفحه را کاملاً مسدود کند.");
   }
 
-  await joinRoom();
   await refreshRoom();
   await pollSignals();
   state.connectionReady = true;

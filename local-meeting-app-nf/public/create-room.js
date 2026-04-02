@@ -24,6 +24,10 @@ form.addEventListener("submit", async (event) => {
   const ownerName = String(formData.get("ownerName") || "").trim();
   const roomTitle = String(formData.get("roomTitle") || "").trim();
   const roomPassword = String(formData.get("roomPassword") || "").trim();
+  if (roomPassword.length < 8) {
+    setStatus("رمز روم باید حداقل ۸ کاراکتر باشد.", "status-error");
+    return;
+  }
 
   try {
     setStatus("در حال ساخت روم...");
@@ -33,7 +37,7 @@ form.addEventListener("submit", async (event) => {
     });
     sessionStorage.setItem(
       "meetingSession",
-      JSON.stringify({ roomCode: data.room.code, userName: ownerName, roomPassword })
+      JSON.stringify({ roomCode: data.room.code, userName: ownerName })
     );
     setStatus(`روم ساخته شد. کد روم: ${data.room.code}`, "status-success");
     window.location.href = `/join-room.html?code=${encodeURIComponent(data.room.code)}`;

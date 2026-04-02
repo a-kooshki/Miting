@@ -544,8 +544,7 @@ async function createRoom(ownerName, roomTitle, roomPassword) {
       invites: [
         {
           tokenHash: hashRoomPassword(inviteToken),
-          expiresAt: new Date(Date.now() + INVITE_TOKEN_TTL_MS).toISOString(),
-          used: false
+          expiresAt: new Date(Date.now() + INVITE_TOKEN_TTL_MS).toISOString()
         }
       ]
     };
@@ -570,14 +569,12 @@ async function joinRoom(roomCode, userName, roomPassword, inviteToken) {
     }
     const activeInvite = (room.invites || []).find(
       (invite) =>
-        !invite.used &&
         new Date(invite.expiresAt).getTime() > Date.now() &&
         verifyRoomPassword(inviteToken, invite.tokenHash)
     );
     if (!activeInvite) {
       return { error: "invalid_invite" };
     }
-    activeInvite.used = true;
     const user = await upsertUser(userName);
 
     sanitizeRoomState(room);

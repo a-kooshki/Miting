@@ -7,7 +7,7 @@ const saved = JSON.parse(sessionStorage.getItem("meetingSession") || "{}");
 form.elements.userName.value = saved.userName || "";
 form.elements.roomCode.value = (params.get("code") || saved.roomCode || "").toUpperCase();
 form.elements.roomPassword.value = saved.roomPassword || "";
-form.elements.inviteToken.value = params.get("token") || saved.inviteToken || "";
+form.elements.inviteToken.value = params.get("token") || params.get("inviteToken") || saved.inviteToken || "";
 
 function setStatus(message, type = "") {
   statusText.textContent = message;

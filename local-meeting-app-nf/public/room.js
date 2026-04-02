@@ -1,7 +1,7 @@
 const params = new URLSearchParams(window.location.search);
 const sessionSeed = JSON.parse(sessionStorage.getItem("meetingSession") || "{}");
 const roomCode = (params.get("code") || sessionSeed.roomCode || "").toUpperCase();
-const userName = params.get("name") || sessionSeed.userName || "Guest";
+const userName = params.get("name") || sessionSeed.userName || "";
 
 const state = {
   room: null,
@@ -500,7 +500,11 @@ async function sendHeartbeat() {
 
 async function refreshRoom() {
   try {
-    const data = await api(`/api/rooms/detail?roomCode=${encodeURIComponent(roomCode)}`);
+    const data = await api(
+      `/api/rooms/detail?roomCode=${encodeURIComponent(roomCode)}&sessionId=${encodeURIComponent(
+        state.participant?.sessionId || ""
+      )}&authToken=${encodeURIComponent(state.authToken || "")}`
+    );
     state.room = data.room;
     state.participants = data.room.participants || [];
     roomTitleEl.textContent = data.room.title;
@@ -554,7 +558,8 @@ async function joinRoom() {
     method: "POST",
     body: JSON.stringify({
       roomCode,
-      userName
+      userName,
+      roomPassword: sessionSeed.roomPassword || ""
     })
   });
 
@@ -769,8 +774,8 @@ window.addEventListener("online", () => {
 });
 
 async function init() {
-  if (!roomCode) {
-    window.location.href = "/";
+  if (!roomCode || !userName || !sessionSeed.roomPassword) {
+    window.location.href = `/join-room.html?code=${encodeURIComponent(roomCode || "")}`;
     return;
   }
 

@@ -223,6 +223,9 @@ function normalizeName(value, fallback) {
   const trimmed = String(value || "").trim();
   return trimmed ? trimmed.slice(0, 40) : fallback;
 }
+function normalizePassword(value) {
+  return String(value || "").trim().slice(0, 120);
+}
 
 function normalizeRoomCode(value) {
   return String(value || "")
@@ -286,6 +289,7 @@ function sanitizeRoomForClient(room) {
   return {
     ...room,
     signals: undefined,
+    passwordHash: undefined,
     participants: (room.participants || []).map((participant) => ({
       sessionId: participant.sessionId,
       userId: participant.userId,
@@ -298,6 +302,28 @@ function sanitizeRoomForClient(room) {
 
 function buildParticipantToken() {
   return crypto.randomBytes(24).toString("hex");
+}
+
+function hashRoomPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyRoomPassword(password, passwordHash) {
+  if (!passwordHash || !password) {
+    return false;
+  }
+  const [salt, expectedHash] = String(passwordHash).split(":");
+  if (!salt || !expectedHash) {
+    return false;
+  }
+  const actualHash = crypto.scryptSync(password, salt, 64).toString("hex");
+  const expectedBuffer = Buffer.from(expectedHash, "hex");
+  const actualBuffer = Buffer.from(actualHash, "hex");
+  if (expectedBuffer.length !== actualBuffer.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
 function getClientIp(request) {
@@ -369,7 +395,7 @@ async function upsertUser(userName) {
   });
 }
 
-async function createRoom(ownerName, roomTitle) {
+async function createRoom(ownerName, roomTitle, roomPassword) {
   const owner = await upsertUser(ownerName);
   return withFileLock(FILES.rooms, async () => {
     const rooms = await readJson(FILES.rooms, []);
@@ -383,6 +409,7 @@ async function createRoom(ownerName, roomTitle) {
       id: generateId("room_"),
       code: roomCode,
       title: normalizeName(roomTitle, "جلسه جدید"),
+      passwordHash: hashRoomPassword(roomPassword),
       ownerId: owner.id,
       createdAt: new Date().toISOString(),
       participants: [],
@@ -395,8 +422,7 @@ async function createRoom(ownerName, roomTitle) {
   });
 }
 
-async function joinRoom(roomCode, userName) {
-  const user = await upsertUser(userName);
+async function joinRoom(roomCode, userName, roomPassword) {
   return withFileLock(FILES.rooms, async () => {
     const rooms = await readJson(FILES.rooms, []);
     const room = rooms.find((item) => item.code === normalizeRoomCode(roomCode));
@@ -404,6 +430,10 @@ async function joinRoom(roomCode, userName) {
     if (!room) {
       return { error: "room_not_found" };
     }
+    if (!verifyRoomPassword(roomPassword, room.passwordHash)) {
+      return { error: "invalid_password" };
+    }
+    const user = await upsertUser(userName);
 
     sanitizeRoomState(room);
     if ((room.participants || []).length >= MAX_PARTICIPANTS_PER_ROOM) {
@@ -603,11 +633,13 @@ async function handleApi(request, response, urlObject) {
 
   if (request.method === "POST" && pathname === "/api/rooms") {
     const body = await parseBody(request);
-    const ownerName = normalizeName(body.ownerName, "Guest");
+    const ownerName = normalizeName(body.ownerName, "");
     const roomTitle = normalizeName(body.roomTitle, "جلسه جدید");
+    const roomPassword = normalizePassword(body.roomPassword);
     assert(ownerName, "نام سازنده لازم است.");
     assert(roomTitle, "عنوان جلسه لازم است.");
-    const { room, owner } = await createRoom(ownerName, roomTitle);
+    assert(roomPassword.length >= 4, "رمز روم باید حداقل ۴ کاراکتر باشد.");
+    const { room, owner } = await createRoom(ownerName, roomTitle, roomPassword);
     sendJson(response, 201, { room: sanitizeRoomForClient(room), owner });
     return;
   }
@@ -616,9 +648,15 @@ async function handleApi(request, response, urlObject) {
     const body = await parseBody(request);
     assert(normalizeRoomCode(body.roomCode), "کد اتاق معتبر نیست.");
     assert(normalizeName(body.userName, ""), "نام کاربر لازم است.");
-    const result = await joinRoom(body.roomCode, body.userName);
+    const roomPassword = normalizePassword(body.roomPassword);
+    assert(roomPassword.length >= 4, "رمز روم لازم است.");
+    const result = await joinRoom(body.roomCode, body.userName, roomPassword);
 
     if (result.error) {
+      if (result.error === "invalid_password") {
+        sendJson(response, 403, { error: "رمز روم نادرست است." });
+        return;
+      }
       if (result.error === "room_full") {
         sendJson(response, 409, { error: "ظرفیت اتاق تکمیل شده است." });
         return;
@@ -633,9 +671,16 @@ async function handleApi(request, response, urlObject) {
 
   if (request.method === "GET" && pathname === "/api/rooms/detail") {
     const roomCode = searchParams.get("roomCode");
+    const sessionId = searchParams.get("sessionId");
+    const authToken = searchParams.get("authToken");
     const room = await getRoomByCode(roomCode);
     if (!room) {
       sendJson(response, 404, { error: "اتاق پیدا نشد." });
+      return;
+    }
+    const participant = validateParticipant(room, sessionId, authToken);
+    if (!participant) {
+      sendJson(response, 403, { error: "اجازه مشاهده جزئیات اتاق ندارید." });
       return;
     }
 

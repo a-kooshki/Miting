@@ -85,6 +85,11 @@ p {
 .wide {
   grid-column: 1 / -1;
 }
+.single-col {
+  grid-template-columns: 1fr;
+  max-width: 680px;
+  margin: 0 auto;
+}
 
 .card,
 .hero-card,
@@ -153,6 +158,21 @@ button:hover {
 }
 
 button.secondary {
+  background: #38bdf8;
+  color: #082f49;
+}
+
+.button-link {
+  display: inline-block;
+  text-decoration: none;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--primary);
+  color: #052e16;
+  font-weight: 700;
+}
+
+.button-link.secondary {
   background: #38bdf8;
   color: #082f49;
 }

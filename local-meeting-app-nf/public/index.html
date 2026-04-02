@@ -12,73 +12,23 @@
         <div>
           <span class="badge">بدون اینترنت جهانی</span>
           <h1>Graph</h1>
-          <p>
-            سکوی جلسه داخلی برای تماس صوتی، تصویری و چت گروهی روی شبکه محلی؛
-            کاملاً مناسب اجرای بدون اینترنت جهانی.
-          </p>
-        </div>
-        <div class="hero-card">
-          <h2>ویژگی‌ها</h2>
-          <ul>
-            <li>ساخت اتاق جلسه با کد کوتاه</li>
-            <li>ورود چند کاربر روی LAN</li>
-            <li>تماس تصویری و صوتی با WebRTC</li>
-            <li>ذخیره اطلاعات در فایل‌های JSON</li>
-          </ul>
+          <p>سامانه جلسه داخلی امن برای شبکه محلی.</p>
         </div>
       </header>
 
       <main class="grid">
         <section class="card">
-          <h2>ساخت اتاق جدید</h2>
-          <p class="section-copy">برای شروع سریع، فقط نام و عنوان جلسه را وارد کنید. کد اتاق به‌صورت خودکار ساخته می‌شود.</p>
-          <form id="createRoomForm" class="stack">
-            <label>
-              <span>نام شما</span>
-              <input type="text" name="ownerName" placeholder="مثلاً: مدیر جلسه" required />
-            </label>
-            <label>
-              <span>عنوان جلسه</span>
-              <input type="text" name="roomTitle" placeholder="مثلاً: جلسه هفتگی تیم" required />
-            </label>
-            <button type="submit">ایجاد اتاق</button>
-          </form>
+          <h2>ساخت روم جدید</h2>
+          <p class="section-copy">اگر مدیر جلسه هستید، این گزینه را انتخاب کنید.</p>
+          <a class="button-link" href="/create-room.html">رفتن به صفحه ساخت روم</a>
         </section>
 
         <section class="card">
-          <h2>ورود به اتاق</h2>
-          <p class="section-copy">اگر کد اتاق را از همکار خود گرفته‌اید، آن را اینجا وارد کنید. حروف کوچک خودکار اصلاح می‌شوند.</p>
-          <form id="joinRoomForm" class="stack">
-            <label>
-              <span>نام شما</span>
-              <input type="text" name="userName" placeholder="نام کاربری" required />
-            </label>
-            <label>
-              <span>کد اتاق</span>
-              <input type="text" name="roomCode" placeholder="مثلاً: A1B2C3" maxlength="16" autocomplete="off" required />
-            </label>
-            <button type="submit" class="secondary">ورود به جلسه</button>
-          </form>
-        </section>
-
-        <section class="card wide" id="statusCard">
-          <h2>وضعیت</h2>
-          <p id="statusText">Graph آماده اجرای جلسه داخلی امن و روان است.</p>
-          <p id="secureHint" class="hint-text"></p>
-          <div class="tips-row">
-            <div class="mini-tip">
-              <strong>پیشنهاد</strong>
-              <span>برای دوربین و میکروفون، نسخه HTTPS را باز کنید.</span>
-            </div>
-            <div class="mini-tip">
-              <strong>نکته</strong>
-              <span>بهترین تجربه وقتی است که همه کاربران در یک شبکه داخلی باشند.</span>
-            </div>
-          </div>
+          <h2>ورود به روم</h2>
+          <p class="section-copy">برای ورود با کد روم، نام کاربری و رمز، اینجا کلیک کنید.</p>
+          <a class="button-link secondary" href="/join-room.html">رفتن به صفحه ورود</a>
         </section>
       </main>
     </div>
-
-    <script src="/app.js"></script>
   </body>
 </html>

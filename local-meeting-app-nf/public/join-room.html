@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Graph | ورود به روم</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <main class="grid single-col">
+        <section class="card">
+          <h2>ورود به روم</h2>
+          <form id="joinRoomForm" class="stack">
+            <label>
+              <span>نام کاربری</span>
+              <input type="text" name="userName" required />
+            </label>
+            <label>
+              <span>کد روم</span>
+              <input type="text" name="roomCode" maxlength="16" required />
+            </label>
+            <label>
+              <span>رمز روم</span>
+              <input type="password" name="roomPassword" minlength="4" required />
+            </label>
+            <button type="submit" class="secondary">ورود</button>
+          </form>
+          <p id="statusText"></p>
+          <a href="/create-room.html">ساخت روم جدید</a>
+        </section>
+      </main>
+    </div>
+    <script src="/join-room.js"></script>
+  </body>
+</html>

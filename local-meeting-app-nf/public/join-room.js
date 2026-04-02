@@ -69,14 +69,13 @@ form.addEventListener("submit", async (event) => {
   const userName = String(formData.get("userName") || "").trim();
   const roomCode = String(formData.get("roomCode") || "").trim().toUpperCase();
   const roomPassword = String(formData.get("roomPassword") || "").trim();
-  const roomPin = String(formData.get("roomPin") || "").replace(/\D/g, "");
   const inviteToken = String(formData.get("inviteToken") || "").trim();
   if (roomPassword.length < 8) {
     setStatus("رمز روم باید حداقل ۸ کاراکتر باشد.", "status-error");
     return;
   }
-  if (roomPin.length < 4 || !inviteToken) {
-    setStatus("PIN و توکن دعوت الزامی هستند.", "status-error");
+  if (!inviteToken) {
+    setStatus("توکن دعوت الزامی است.", "status-error");
     return;
   }
 
@@ -84,7 +83,7 @@ form.addEventListener("submit", async (event) => {
     setStatus("در حال بررسی و ورود...");
     const data = await api("/api/rooms/join", {
       method: "POST",
-      body: JSON.stringify({ userName, roomCode, roomPassword, roomPin, inviteToken })
+      body: JSON.stringify({ userName, roomCode, roomPassword, inviteToken })
     });
     const roomKey = await deriveRoomKey(roomPassword, roomCode);
 

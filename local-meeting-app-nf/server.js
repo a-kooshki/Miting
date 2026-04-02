@@ -247,11 +247,6 @@ function normalizeName(value, fallback) {
 function normalizePassword(value) {
   return String(value || "").trim().slice(0, 120);
 }
-function normalizePin(value) {
-  return String(value || "")
-    .replace(/\D/g, "")
-    .slice(0, 8);
-}
 function isStrongPassword(value) {
   const password = String(value || "");
   return (
@@ -340,7 +335,6 @@ function sanitizeRoomForClient(room) {
     ...room,
     signals: undefined,
     passwordHash: undefined,
-    pinHash: undefined,
     invites: undefined,
     participants: (room.participants || []).map((participant) => ({
       sessionId: participant.sessionId,
@@ -526,7 +520,7 @@ async function upsertUser(userName) {
   });
 }
 
-async function createRoom(ownerName, roomTitle, roomPassword, roomPin) {
+async function createRoom(ownerName, roomTitle, roomPassword) {
   const owner = await upsertUser(ownerName);
   return withFileLock(FILES.rooms, async () => {
     let rooms = await readJson(FILES.rooms, []);
@@ -543,7 +537,6 @@ async function createRoom(ownerName, roomTitle, roomPassword, roomPin) {
       code: roomCode,
       title: normalizeName(roomTitle, "جلسه جدید"),
       passwordHash: hashRoomPassword(roomPassword),
-      pinHash: hashRoomPassword(roomPin),
       ownerId: owner.id,
       createdAt: new Date().toISOString(),
       participants: [],
@@ -563,7 +556,7 @@ async function createRoom(ownerName, roomTitle, roomPassword, roomPin) {
   });
 }
 
-async function joinRoom(roomCode, userName, roomPassword, roomPin, inviteToken) {
+async function joinRoom(roomCode, userName, roomPassword, inviteToken) {
   return withFileLock(FILES.rooms, async () => {
     let rooms = await readJson(FILES.rooms, []);
     rooms = pruneRooms(rooms);
@@ -574,9 +567,6 @@ async function joinRoom(roomCode, userName, roomPassword, roomPin, inviteToken) 
     }
     if (!verifyRoomPassword(roomPassword, room.passwordHash)) {
       return { error: "invalid_password" };
-    }
-    if (!verifyRoomPassword(roomPin, room.pinHash)) {
-      return { error: "invalid_pin" };
     }
     const activeInvite = (room.invites || []).find(
       (invite) =>
@@ -820,13 +810,11 @@ async function handleApi(request, response, urlObject) {
     const ownerName = normalizeName(body.ownerName, "");
     const roomTitle = normalizeName(body.roomTitle, "جلسه جدید");
     const roomPassword = normalizePassword(body.roomPassword);
-    const roomPin = normalizePin(body.roomPin);
     assert(ownerName, "نام سازنده لازم است.");
     assert(roomTitle, "عنوان جلسه لازم است.");
     assert(!hasBlockedMarkup(ownerName) && !hasBlockedMarkup(roomTitle), "ورودی شامل تگ غیرمجاز است.");
     assert(isStrongPassword(roomPassword), "رمز روم باید حداقل ۸ کاراکتر و شامل حرف، عدد و نماد باشد.");
-    assert(roomPin.length >= 4, "PIN روم باید حداقل ۴ رقم باشد.");
-    const { room, owner, inviteToken } = await createRoom(ownerName, roomTitle, roomPassword, roomPin);
+    const { room, owner, inviteToken } = await createRoom(ownerName, roomTitle, roomPassword);
     sendJson(response, 201, { room: sanitizeRoomForClient(room), owner, inviteToken });
     return;
   }
@@ -837,21 +825,19 @@ async function handleApi(request, response, urlObject) {
     assert(normalizeName(body.userName, ""), "نام کاربر لازم است.");
     assert(!hasBlockedMarkup(body.userName), "ورودی شامل تگ غیرمجاز است.");
     const roomPassword = normalizePassword(body.roomPassword);
-    const roomPin = normalizePin(body.roomPin);
     const inviteToken = String(body.inviteToken || "").trim();
     assert(roomPassword.length >= 8, "رمز روم معتبر نیست.");
-    assert(roomPin.length >= 4, "PIN روم معتبر نیست.");
     assert(inviteToken.length >= 8, "لینک دعوت معتبر نیست.");
     if (isRoomJoinBlocked(request, body.roomCode)) {
       sendJson(response, 429, { error: "تلاش‌های ناموفق زیاد بوده است. چند دقیقه دیگر دوباره تلاش کنید." });
       return;
     }
-    const result = await joinRoom(body.roomCode, body.userName, roomPassword, roomPin, inviteToken);
+    const result = await joinRoom(body.roomCode, body.userName, roomPassword, inviteToken);
 
     if (result.error) {
-      if (["invalid_password", "invalid_pin", "invalid_invite"].includes(result.error)) {
+      if (["invalid_password", "invalid_invite"].includes(result.error)) {
         registerFailedRoomJoin(request, body.roomCode);
-        sendJson(response, 403, { error: "اطلاعات ورود (رمز/ PIN / دعوت) معتبر نیست." });
+        sendJson(response, 403, { error: "اطلاعات ورود (رمز / دعوت) معتبر نیست." });
         return;
       }
       if (result.error === "room_full") {

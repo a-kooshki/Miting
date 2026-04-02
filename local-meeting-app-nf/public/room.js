@@ -46,6 +46,9 @@ const inviteLinkText = document.getElementById("inviteLinkText");
 const secureStateBadge = document.getElementById("secureStateBadge");
 const openSecureBtn = document.getElementById("openSecureBtn");
 const connectionLoader = document.getElementById("connectionLoader");
+const videoFocusModal = document.getElementById("videoFocusModal");
+const focusedVideo = document.getElementById("focusedVideo");
+const closeVideoFocusBtn = document.getElementById("closeVideoFocusBtn");
 
 function setHint(text) {
   connectionHint.textContent = text;
@@ -159,6 +162,23 @@ function setInviteLink() {
 function toggleEmptyRemoteState() {
   const remoteCardsCount = videoGrid.querySelectorAll(".video-card[data-session-id]").length;
   emptyRemoteStateEl.hidden = remoteCardsCount > 0;
+}
+
+function openVideoFocus(stream, muted = false) {
+  if (!videoFocusModal || !focusedVideo || !stream) {
+    return;
+  }
+  focusedVideo.srcObject = stream;
+  focusedVideo.muted = muted;
+  videoFocusModal.hidden = false;
+}
+
+function closeVideoFocus() {
+  if (!videoFocusModal || !focusedVideo) {
+    return;
+  }
+  focusedVideo.srcObject = null;
+  videoFocusModal.hidden = true;
 }
 
 async function ensureConfig() {
@@ -319,7 +339,7 @@ function ensureRemoteCard(sessionId, name) {
   }
 
   card = document.createElement("article");
-  card.className = "video-card";
+  card.className = "video-card clickable-video";
   card.dataset.sessionId = sessionId;
   const video = document.createElement("video");
   video.autoplay = true;
@@ -328,6 +348,11 @@ function ensureRemoteCard(sessionId, name) {
   label.className = "video-label";
   label.textContent = name;
   card.append(video, label);
+  card.addEventListener("click", () => {
+    if (video.srcObject) {
+      openVideoFocus(video.srcObject, false);
+    }
+  });
   videoGrid.appendChild(card);
   toggleEmptyRemoteState();
   return card.querySelector("video");
@@ -792,6 +817,19 @@ copyInviteBtn.addEventListener("click", async () => {
     const copied = document.execCommand("copy");
     textArea.remove();
     setHint(copied ? "لینک ورود کپی شد." : "کپی خودکار ممکن نشد. لینک را دستی کپی کنید.");
+  }
+});
+
+document.querySelector(".video-card.local")?.addEventListener("click", () => {
+  if (state.localStream) {
+    openVideoFocus(state.localStream, true);
+  }
+});
+
+closeVideoFocusBtn?.addEventListener("click", closeVideoFocus);
+videoFocusModal?.addEventListener("click", (event) => {
+  if (event.target === videoFocusModal) {
+    closeVideoFocus();
   }
 });
 

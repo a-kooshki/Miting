@@ -24,8 +24,15 @@ form.addEventListener("submit", async (event) => {
   const ownerName = String(formData.get("ownerName") || "").trim();
   const roomTitle = String(formData.get("roomTitle") || "").trim();
   const roomPassword = String(formData.get("roomPassword") || "").trim();
+  const accessCode = String(formData.get("accessCode") || "")
+    .replace(/\D/g, "")
+    .slice(0, 4);
   if (roomPassword.length < 8) {
     setStatus("رمز روم باید حداقل ۸ کاراکتر باشد.", "status-error");
+    return;
+  }
+  if (accessCode.length !== 4) {
+    setStatus("کد دسترسی ساخت روم معتبر نیست.", "status-error");
     return;
   }
 
@@ -33,7 +40,7 @@ form.addEventListener("submit", async (event) => {
     setStatus("در حال ساخت روم...");
     const data = await api("/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ ownerName, roomTitle, roomPassword })
+      body: JSON.stringify({ ownerName, roomTitle, roomPassword, accessCode })
     });
     sessionStorage.setItem(
       "meetingSession",

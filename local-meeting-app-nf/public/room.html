@@ -81,7 +81,7 @@
         </section>
 
         <section id="videoGrid" class="video-grid">
-          <article class="video-card local">
+          <article class="video-card local clickable-video">
             <video id="localVideo" autoplay playsinline muted></video>
             <div class="video-label">شما</div>
           </article>
@@ -90,6 +90,10 @@
           </article>
         </section>
       </main>
+    </div>
+    <div id="videoFocusModal" class="video-focus-modal" hidden>
+      <button id="closeVideoFocusBtn" class="ghost">✖ بستن</button>
+      <video id="focusedVideo" autoplay playsinline controls muted></video>
     </div>
 
     <script src="/room.js"></script>

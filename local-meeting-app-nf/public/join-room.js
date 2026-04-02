@@ -7,7 +7,6 @@ const saved = JSON.parse(sessionStorage.getItem("meetingSession") || "{}");
 form.elements.userName.value = saved.userName || "";
 form.elements.roomCode.value = (params.get("code") || saved.roomCode || "").toUpperCase();
 form.elements.roomPassword.value = saved.roomPassword || "";
-form.elements.accessCode.value = "";
 
 function setStatus(message, type = "") {
   statusText.textContent = message;
@@ -69,23 +68,15 @@ form.addEventListener("submit", async (event) => {
   const userName = String(formData.get("userName") || "").trim();
   const roomCode = String(formData.get("roomCode") || "").trim().toUpperCase();
   const roomPassword = String(formData.get("roomPassword") || "").trim();
-  const accessCode = String(formData.get("accessCode") || "")
-    .replace(/\D/g, "")
-    .slice(0, 4);
   if (roomPassword.length < 8) {
     setStatus("رمز روم باید حداقل ۸ کاراکتر باشد.", "status-error");
     return;
   }
-  if (accessCode.length !== 4) {
-    setStatus("کد دسترسی ۴ رقمی معتبر نیست.", "status-error");
-    return;
-  }
-
   try {
     setStatus("در حال بررسی و ورود...");
     const data = await api("/api/rooms/join", {
       method: "POST",
-      body: JSON.stringify({ userName, roomCode, roomPassword, accessCode })
+      body: JSON.stringify({ userName, roomCode, roomPassword })
     });
     const roomKey = await deriveRoomKey(roomPassword, roomCode);
 

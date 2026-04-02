@@ -58,7 +58,7 @@ const failedRoomJoinStore = new Map();
 const PASSWORD_PEPPER = process.env.PASSWORD_PEPPER || "";
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 30 * 60_000);
 const TOKEN_ROTATE_INTERVAL_MS = Number(process.env.TOKEN_ROTATE_INTERVAL_MS || 5 * 60_000);
-const ROOM_MAX_AGE_MS = Number(process.env.ROOM_MAX_AGE_MS || 24 * 60 * 60_000);
+const ROOM_EMPTY_TTL_MS = Number(process.env.ROOM_EMPTY_TTL_MS || 10 * 60_000);
 const MESSAGE_PER_MINUTE_LIMIT = Number(process.env.MESSAGE_PER_MINUTE_LIMIT || 40);
 const SIGNAL_PER_MINUTE_LIMIT = Number(process.env.SIGNAL_PER_MINUTE_LIMIT || 180);
 const perSessionUsageStore = new Map();
@@ -308,6 +308,11 @@ function isParticipantActive(participant) {
 
 function sanitizeRoomState(room) {
   room.participants = (room.participants || []).filter(isParticipantActive);
+  if ((room.participants || []).length === 0) {
+    room.emptiedAt = room.emptiedAt || new Date().toISOString();
+  } else {
+    room.emptiedAt = null;
+  }
   const activeSessionIds = new Set(room.participants.map((item) => item.sessionId));
   room.signals = (room.signals || []).filter((signal) => {
     const age = Date.now() - new Date(signal.createdAt || Date.now()).getTime();
@@ -320,12 +325,9 @@ function sanitizeRoomState(room) {
 function pruneRooms(rooms) {
   const now = Date.now();
   return rooms.filter((room) => {
-    const createdAt = new Date(room.createdAt || now).getTime();
-    const hasActiveParticipants = (room.participants || []).some(isParticipantActive);
-    if (hasActiveParticipants) {
-      return true;
-    }
-    return now - createdAt < ROOM_MAX_AGE_MS;
+    const emptiedAt = new Date(room.emptiedAt || room.createdAt || now).getTime();
+    const hasActiveParticipants = (room.participants || []).length > 0;
+    return hasActiveParticipants || now - emptiedAt < ROOM_EMPTY_TTL_MS;
   });
 }
 
@@ -547,7 +549,7 @@ async function createRoom(ownerName, roomTitle, roomPassword) {
   });
 }
 
-async function joinRoom(roomCode, userName, roomPassword, accessCode) {
+async function joinRoom(roomCode, userName, roomPassword) {
   return withFileLock(FILES.rooms, async () => {
     let rooms = await readJson(FILES.rooms, []);
     rooms = pruneRooms(rooms);
@@ -559,10 +561,8 @@ async function joinRoom(roomCode, userName, roomPassword, accessCode) {
     if (!verifyRoomPassword(roomPassword, room.passwordHash)) {
       return { error: "invalid_password" };
     }
-    if (accessCode !== buildServerAccessCode()) {
-      return { error: "invalid_access_code" };
-    }
     const user = await upsertUser(userName);
+    room.emptiedAt = null;
 
     sanitizeRoomState(room);
     if ((room.participants || []).length >= MAX_PARTICIPANTS_PER_ROOM) {
@@ -794,10 +794,14 @@ async function handleApi(request, response, urlObject) {
     const ownerName = normalizeName(body.ownerName, "");
     const roomTitle = normalizeName(body.roomTitle, "جلسه جدید");
     const roomPassword = normalizePassword(body.roomPassword);
+    const accessCode = String(body.accessCode || "")
+      .replace(/\D/g, "")
+      .slice(0, 4);
     assert(ownerName, "نام سازنده لازم است.");
     assert(roomTitle, "عنوان جلسه لازم است.");
     assert(!hasBlockedMarkup(ownerName) && !hasBlockedMarkup(roomTitle), "ورودی شامل تگ غیرمجاز است.");
     assert(isStrongPassword(roomPassword), "رمز روم باید حداقل ۸ کاراکتر و شامل حرف، عدد و نماد باشد.");
+    assert(accessCode === buildServerAccessCode(), "کد دسترسی ساخت روم معتبر نیست.");
     const { room, owner } = await createRoom(ownerName, roomTitle, roomPassword);
     sendJson(response, 201, { room: sanitizeRoomForClient(room), owner });
     return;
@@ -809,21 +813,17 @@ async function handleApi(request, response, urlObject) {
     assert(normalizeName(body.userName, ""), "نام کاربر لازم است.");
     assert(!hasBlockedMarkup(body.userName), "ورودی شامل تگ غیرمجاز است.");
     const roomPassword = normalizePassword(body.roomPassword);
-    const accessCode = String(body.accessCode || "")
-      .replace(/\D/g, "")
-      .slice(0, 4);
     assert(roomPassword.length >= 8, "رمز روم معتبر نیست.");
-    assert(accessCode.length === 4, "کد دسترسی معتبر نیست.");
     if (isRoomJoinBlocked(request, body.roomCode)) {
       sendJson(response, 429, { error: "تلاش‌های ناموفق زیاد بوده است. چند دقیقه دیگر دوباره تلاش کنید." });
       return;
     }
-    const result = await joinRoom(body.roomCode, body.userName, roomPassword, accessCode);
+    const result = await joinRoom(body.roomCode, body.userName, roomPassword);
 
     if (result.error) {
-      if (["invalid_password", "invalid_access_code"].includes(result.error)) {
+      if (["invalid_password"].includes(result.error)) {
         registerFailedRoomJoin(request, body.roomCode);
-        sendJson(response, 403, { error: "اطلاعات ورود (رمز / کد دسترسی) معتبر نیست." });
+        sendJson(response, 403, { error: "رمز ورود معتبر نیست." });
         return;
       }
       if (result.error === "room_full") {

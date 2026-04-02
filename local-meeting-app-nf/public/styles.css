@@ -261,7 +261,7 @@ input:disabled {
 
 .room-shell {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: minmax(280px, 340px) 1fr;
   gap: 20px;
   min-height: 100vh;
 }
@@ -487,9 +487,53 @@ input:disabled {
     overflow: auto;
   }
 
+  .room-shell {
+    min-height: auto;
+  }
+
+  .meeting-area {
+    order: 1;
+  }
+
+  .sidebar {
+    order: 2;
+  }
+
   .video-toolbar,
   .invite-box {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  .controls button:nth-last-child(-n + 2) {
+    grid-column: auto;
+  }
+
+  .chat-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .shell,
+  .room-shell {
+    width: calc(100% - 18px);
+    padding-top: 14px;
+  }
+
+  .card,
+  .hero-card,
+  .video-toolbar {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .video-card,
+  .video-card video {
+    min-height: 180px;
   }
 }

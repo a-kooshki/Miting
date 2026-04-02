@@ -13,6 +13,39 @@ function setStatus(message, type = "") {
   statusText.className = type;
 }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+async function deriveRoomKey(password, roomCode) {
+  const encoder = new TextEncoder();
+  const baseKey = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, [
+    "deriveKey"
+  ]);
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: encoder.encode(`graph-room-${roomCode}`),
+      iterations: 150_000,
+      hash: "SHA-256"
+    },
+    baseKey,
+    {
+      name: "AES-GCM",
+      length: 256
+    },
+    true,
+    ["encrypt", "decrypt"]
+  );
+  const exported = await crypto.subtle.exportKey("raw", key);
+  return arrayBufferToBase64(exported);
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -46,6 +79,7 @@ form.addEventListener("submit", async (event) => {
       method: "POST",
       body: JSON.stringify({ userName, roomCode, roomPassword })
     });
+    const roomKey = await deriveRoomKey(roomPassword, roomCode);
 
     sessionStorage.setItem(
       "meetingSession",
@@ -53,7 +87,8 @@ form.addEventListener("submit", async (event) => {
         roomCode,
         userName,
         authToken: data.authToken,
-        participantSessionId: data.participant?.sessionId
+        participantSessionId: data.participant?.sessionId,
+        roomKey
       })
     );
 

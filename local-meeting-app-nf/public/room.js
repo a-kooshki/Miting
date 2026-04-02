@@ -2,6 +2,7 @@ const params = new URLSearchParams(window.location.search);
 const sessionSeed = JSON.parse(sessionStorage.getItem("meetingSession") || "{}");
 const roomCode = (params.get("code") || sessionSeed.roomCode || "").toUpperCase();
 const userName = params.get("name") || sessionSeed.userName || "";
+const ROOM_ENCRYPTION_PREFIX = "enc:v1:";
 
 const state = {
   room: null,
@@ -19,7 +20,8 @@ const state = {
   joined: false,
   messagesLoaded: false,
   renderedMessageCount: 0,
-  connectionReady: false
+  connectionReady: false,
+  roomCryptoKey: null
 };
 
 const roomTitleEl = document.getElementById("roomTitle");
@@ -47,6 +49,73 @@ const connectionLoader = document.getElementById("connectionLoader");
 
 function setHint(text) {
   connectionHint.textContent = text;
+}
+
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function uint8ArrayToBase64(bytes) {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+async function importRoomCryptoKey() {
+  if (!sessionSeed.roomKey) {
+    return null;
+  }
+
+  try {
+    const rawKey = base64ToUint8Array(sessionSeed.roomKey);
+    return await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt", "decrypt"]);
+  } catch {
+    return null;
+  }
+}
+
+async function encryptMessageText(text) {
+  if (!state.roomCryptoKey) {
+    return text;
+  }
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    state.roomCryptoKey,
+    new TextEncoder().encode(text)
+  );
+  return `${ROOM_ENCRYPTION_PREFIX}${uint8ArrayToBase64(iv)}:${uint8ArrayToBase64(new Uint8Array(encrypted))}`;
+}
+
+async function decryptMessageText(text) {
+  if (!text || !text.startsWith(ROOM_ENCRYPTION_PREFIX) || !state.roomCryptoKey) {
+    return text;
+  }
+
+  try {
+    const encoded = text.slice(ROOM_ENCRYPTION_PREFIX.length);
+    const [ivPart, cipherPart] = encoded.split(":");
+    if (!ivPart || !cipherPart) {
+      return "[پیام رمزگشایی نشد]";
+    }
+    const iv = base64ToUint8Array(ivPart);
+    const cipherBytes = base64ToUint8Array(cipherPart);
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      state.roomCryptoKey,
+      cipherBytes
+    );
+    return new TextDecoder().decode(decrypted);
+  } catch {
+    return "[پیام رمزگشایی نشد]";
+  }
 }
 
 function setConnectionLoader(loading) {
@@ -199,7 +268,7 @@ function renderParticipants() {
   });
 }
 
-function renderMessages(messages) {
+async function renderMessages(messages) {
   messagesEl.innerHTML = "";
   state.renderedMessageCount = messages.length;
 
@@ -211,11 +280,14 @@ function renderMessages(messages) {
     return;
   }
 
-  messages.forEach((message) => appendMessage(message, false));
+  for (const message of messages) {
+    // eslint-disable-next-line no-await-in-loop
+    await appendMessage(message, false);
+  }
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-function appendMessage(message, scroll = true) {
+async function appendMessage(message, scroll = true) {
   const emptyMessage = messagesEl.querySelector(".message.empty");
   if (emptyMessage) {
     emptyMessage.remove();
@@ -226,7 +298,7 @@ function appendMessage(message, scroll = true) {
   const senderEl = document.createElement("strong");
   senderEl.textContent = message.sender;
   const textEl = document.createElement("span");
-  textEl.textContent = message.text;
+  textEl.textContent = await decryptMessageText(message.text);
   wrapper.append(senderEl, textEl);
   messagesEl.appendChild(wrapper);
 
@@ -542,12 +614,15 @@ async function refreshRoom() {
     renderParticipants();
 
     if (!state.messagesLoaded) {
-      renderMessages(data.messages || []);
+      await renderMessages(data.messages || []);
       state.messagesLoaded = true;
     } else {
       const messages = data.messages || [];
       const newMessages = messages.slice(state.renderedMessageCount);
-      newMessages.forEach((message) => appendMessage(message));
+      for (const message of newMessages) {
+        // eslint-disable-next-line no-await-in-loop
+        await appendMessage(message);
+      }
       state.renderedMessageCount = messages.length;
     }
 
@@ -711,16 +786,17 @@ chatForm.addEventListener("submit", async (event) => {
   }
 
   try {
+    const encryptedText = await encryptMessageText(text);
     await api("/api/messages", {
       method: "POST",
       body: JSON.stringify({
         roomCode,
         sessionId: state.participant.sessionId,
         authToken: state.authToken,
-        text
+        text: encryptedText
       })
     });
-    appendMessage({ sender: userName, text });
+    await appendMessage({ sender: userName, text: encryptedText });
     state.renderedMessageCount += 1;
     chatInput.value = "";
   } catch (error) {
@@ -785,7 +861,7 @@ window.addEventListener("online", () => {
 });
 
 async function init() {
-  if (!roomCode || !userName || !sessionSeed.authToken || !sessionSeed.participantSessionId) {
+  if (!roomCode || !userName || !sessionSeed.authToken || !sessionSeed.participantSessionId || !sessionSeed.roomKey) {
     window.location.href = `/join-room.html?code=${encodeURIComponent(roomCode || "")}`;
     return;
   }
@@ -798,6 +874,11 @@ async function init() {
   toggleEmptyRemoteState();
   roomCodeBadgeEl.textContent = roomCode;
   currentUserNameEl.textContent = userName;
+  state.roomCryptoKey = await importRoomCryptoKey();
+  if (!state.roomCryptoKey) {
+    window.location.href = `/join-room.html?code=${encodeURIComponent(roomCode || "")}`;
+    return;
+  }
   state.authToken = sessionSeed.authToken;
   state.participant = {
     sessionId: sessionSeed.participantSessionId,

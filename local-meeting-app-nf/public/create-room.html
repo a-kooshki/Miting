@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Graph | ساخت روم</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <main class="grid single-col">
+        <section class="card">
+          <h2>🛠️ ساخت روم جدید</h2>
+          <form id="createRoomForm" class="stack">
+            <label>
+              <span>👤 نام شما</span>
+              <input type="text" name="ownerName" required />
+            </label>
+            <label>
+              <span>🏷️ عنوان روم</span>
+              <input type="text" name="roomTitle" required />
+            </label>
+            <label>
+              <span>🔑 رمز روم</span>
+              <input type="password" name="roomPassword" minlength="8" required />
+            </label>
+            <label>
+              <span>⏱️ کد دسترسی ساخت روم</span>
+              <input type="text" name="accessCode" maxlength="4" minlength="4" inputmode="numeric" required />
+            </label>
+            <button type="submit">➕ ساخت روم</button>
+          </form>
+          <p id="statusText"></p>
+          <a href="/login.html">قبلاً روم ساختی؟ ورود به روم</a>
+        </section>
+      </main>
+    </div>
+    <script src="/create-room.js"></script>
+  </body>
+</html>

@@ -133,7 +133,9 @@ function persistSession() {
       roomCode,
       userName,
       authToken: state.authToken,
-      participantSessionId: state.participant?.sessionId
+      participantSessionId: state.participant?.sessionId,
+      roomKey: sessionSeed.roomKey,
+      inviteToken: sessionSeed.inviteToken
     })
   );
 }
@@ -150,7 +152,7 @@ function updateSecureBadge() {
 }
 
 function setInviteLink() {
-  const inviteUrl = `${location.origin}/room.html?code=${encodeURIComponent(roomCode)}`;
+  const inviteUrl = `${location.origin}/join-room.html?code=${encodeURIComponent(roomCode)}&token=${encodeURIComponent(sessionSeed.inviteToken || "")}`;
   inviteLinkText.textContent = inviteUrl;
   inviteLinkText.title = inviteUrl;
 }
@@ -241,6 +243,10 @@ async function api(path, options = {}) {
       throw new Error("سرور موقتاً درخواست‌های زیاد دریافت کرده است. چند ثانیه دیگر تلاش کنید.");
     }
     throw new Error(data.error || "خطا در ارتباط با سرور");
+  }
+  if (data.renewedAuthToken) {
+    state.authToken = data.renewedAuthToken;
+    persistSession();
   }
 
   return data;
@@ -410,13 +416,25 @@ function buildPeerConnection(remoteParticipant, shouldInitiate) {
   }
 
   const peer = new RTCPeerConnection({
-    iceServers: state.config?.stunPort
-      ? [
-          {
-            urls: [`stun:${location.hostname}:${state.config.stunPort}`]
-          }
-        ]
-      : [],
+    iceServers: [
+      ...(state.config?.turnUrls?.length
+        ? [
+            {
+              urls: state.config.turnUrls,
+              username: state.config.turnUsername || undefined,
+              credential: state.config.turnCredential || undefined
+            }
+          ]
+        : []),
+      ...(state.config?.stunPort
+        ? [
+            {
+              urls: [`stun:${location.hostname}:${state.config.stunPort}`]
+            }
+          ]
+        : [])
+    ],
+    iceTransportPolicy: state.config?.forceRelay ? "relay" : "all",
     iceCandidatePoolSize: 4
   });
 
@@ -848,6 +866,7 @@ window.addEventListener("beforeunload", () => {
       { type: "application/json" }
     )
   );
+  sessionStorage.removeItem("meetingSession");
 });
 
 window.addEventListener("offline", () => {

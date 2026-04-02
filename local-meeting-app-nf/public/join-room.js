@@ -7,6 +7,7 @@ const saved = JSON.parse(sessionStorage.getItem("meetingSession") || "{}");
 form.elements.userName.value = saved.userName || "";
 form.elements.roomCode.value = (params.get("code") || saved.roomCode || "").toUpperCase();
 form.elements.roomPassword.value = saved.roomPassword || "";
+form.elements.inviteToken.value = params.get("token") || saved.inviteToken || "";
 
 function setStatus(message, type = "") {
   statusText.textContent = message;
@@ -31,7 +32,7 @@ async function deriveRoomKey(password, roomCode) {
     {
       name: "PBKDF2",
       salt: encoder.encode(`graph-room-${roomCode}`),
-      iterations: 150_000,
+      iterations: 600_000,
       hash: "SHA-256"
     },
     baseKey,
@@ -68,8 +69,14 @@ form.addEventListener("submit", async (event) => {
   const userName = String(formData.get("userName") || "").trim();
   const roomCode = String(formData.get("roomCode") || "").trim().toUpperCase();
   const roomPassword = String(formData.get("roomPassword") || "").trim();
+  const roomPin = String(formData.get("roomPin") || "").replace(/\D/g, "");
+  const inviteToken = String(formData.get("inviteToken") || "").trim();
   if (roomPassword.length < 8) {
     setStatus("رمز روم باید حداقل ۸ کاراکتر باشد.", "status-error");
+    return;
+  }
+  if (roomPin.length < 4 || !inviteToken) {
+    setStatus("PIN و توکن دعوت الزامی هستند.", "status-error");
     return;
   }
 
@@ -77,7 +84,7 @@ form.addEventListener("submit", async (event) => {
     setStatus("در حال بررسی و ورود...");
     const data = await api("/api/rooms/join", {
       method: "POST",
-      body: JSON.stringify({ userName, roomCode, roomPassword })
+      body: JSON.stringify({ userName, roomCode, roomPassword, roomPin, inviteToken })
     });
     const roomKey = await deriveRoomKey(roomPassword, roomCode);
 
@@ -88,7 +95,8 @@ form.addEventListener("submit", async (event) => {
         userName,
         authToken: data.authToken,
         participantSessionId: data.participant?.sessionId,
-        roomKey
+        roomKey,
+        inviteToken
       })
     );
 

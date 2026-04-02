@@ -15,6 +15,13 @@ const CERTS_DIR = path.join(__dirname, "certs");
 const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
 const PARTICIPANT_TTL_MS = Number(process.env.PARTICIPANT_TTL_MS || 30_000);
 const STUN_PORT = Number(process.env.STUN_PORT || 3478);
+const TURN_URLS = String(process.env.TURN_URLS || "")
+  .split(",")
+  .map((item) => item.trim())
+  .filter(Boolean);
+const TURN_USERNAME = String(process.env.TURN_USERNAME || "");
+const TURN_CREDENTIAL = String(process.env.TURN_CREDENTIAL || "");
+const FORCE_TURN_RELAY = process.env.FORCE_TURN_RELAY === "true";
 
 const FILES = {
   users: path.join(DATA_DIR, "users.json"),
@@ -49,6 +56,13 @@ const ROOM_JOIN_ATTEMPT_WINDOW_MS = Number(process.env.ROOM_JOIN_ATTEMPT_WINDOW_
 const ROOM_JOIN_MAX_FAILED_ATTEMPTS = Number(process.env.ROOM_JOIN_MAX_FAILED_ATTEMPTS || 8);
 const failedRoomJoinStore = new Map();
 const PASSWORD_PEPPER = process.env.PASSWORD_PEPPER || "";
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 30 * 60_000);
+const TOKEN_ROTATE_INTERVAL_MS = Number(process.env.TOKEN_ROTATE_INTERVAL_MS || 5 * 60_000);
+const INVITE_TOKEN_TTL_MS = Number(process.env.INVITE_TOKEN_TTL_MS || 2 * 60 * 60_000);
+const ROOM_MAX_AGE_MS = Number(process.env.ROOM_MAX_AGE_MS || 24 * 60 * 60_000);
+const MESSAGE_PER_MINUTE_LIMIT = Number(process.env.MESSAGE_PER_MINUTE_LIMIT || 40);
+const SIGNAL_PER_MINUTE_LIMIT = Number(process.env.SIGNAL_PER_MINUTE_LIMIT || 180);
+const perSessionUsageStore = new Map();
 
 async function ensureStorage() {
   await fsp.mkdir(DATA_DIR, { recursive: true });
@@ -233,6 +247,11 @@ function normalizeName(value, fallback) {
 function normalizePassword(value) {
   return String(value || "").trim().slice(0, 120);
 }
+function normalizePin(value) {
+  return String(value || "")
+    .replace(/\D/g, "")
+    .slice(0, 8);
+}
 function isStrongPassword(value) {
   const password = String(value || "");
   return (
@@ -241,6 +260,9 @@ function isStrongPassword(value) {
     /\d/.test(password) &&
     /[^A-Za-z0-9]/.test(password)
   );
+}
+function hasBlockedMarkup(value) {
+  return /<\s*(script|img|iframe)/i.test(String(value || ""));
 }
 
 function normalizeRoomCode(value) {
@@ -301,11 +323,25 @@ function sanitizeRoomState(room) {
   });
 }
 
+function pruneRooms(rooms) {
+  const now = Date.now();
+  return rooms.filter((room) => {
+    const createdAt = new Date(room.createdAt || now).getTime();
+    const hasActiveParticipants = (room.participants || []).some(isParticipantActive);
+    if (hasActiveParticipants) {
+      return true;
+    }
+    return now - createdAt < ROOM_MAX_AGE_MS;
+  });
+}
+
 function sanitizeRoomForClient(room) {
   return {
     ...room,
     signals: undefined,
     passwordHash: undefined,
+    pinHash: undefined,
+    invites: undefined,
     participants: (room.participants || []).map((participant) => ({
       sessionId: participant.sessionId,
       userId: participant.userId,
@@ -318,6 +354,10 @@ function sanitizeRoomForClient(room) {
 
 function buildParticipantToken() {
   return crypto.randomBytes(24).toString("hex");
+}
+
+function buildInviteToken() {
+  return crypto.randomBytes(18).toString("base64url");
 }
 
 function hashRoomPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -391,7 +431,13 @@ function isRoomJoinBlocked(request, roomCode) {
     return false;
   }
 
-  return entry.attempts >= ROOM_JOIN_MAX_FAILED_ATTEMPTS;
+  if (entry.blockedUntil && Date.now() < entry.blockedUntil) {
+    return true;
+  }
+  if (entry.nextAllowedAt && Date.now() < entry.nextAllowedAt) {
+    return true;
+  }
+  return false;
 }
 
 function registerFailedRoomJoin(request, roomCode) {
@@ -401,12 +447,17 @@ function registerFailedRoomJoin(request, roomCode) {
   if (!entry || now > entry.resetAt) {
     failedRoomJoinStore.set(key, {
       attempts: 1,
-      resetAt: now + ROOM_JOIN_ATTEMPT_WINDOW_MS
+      resetAt: now + ROOM_JOIN_ATTEMPT_WINDOW_MS,
+      nextAllowedAt: now + 1_000
     });
     return;
   }
 
   entry.attempts += 1;
+  entry.nextAllowedAt = now + Math.min(2 ** entry.attempts * 1000, 60_000);
+  if (entry.attempts >= ROOM_JOIN_MAX_FAILED_ATTEMPTS) {
+    entry.blockedUntil = now + 15 * 60_000;
+  }
   failedRoomJoinStore.set(key, entry);
 }
 
@@ -424,7 +475,32 @@ function validateParticipant(room, sessionId, authToken) {
     return null;
   }
 
+  const issuedAt = new Date(participant.authIssuedAt || participant.joinedAt).getTime();
+  if (Date.now() - issuedAt > SESSION_TTL_MS) {
+    return null;
+  }
+
   return participant;
+}
+
+function shouldRotateToken(participant) {
+  const lastRotatedAt = new Date(participant.lastRotatedAt || participant.authIssuedAt || participant.joinedAt).getTime();
+  return Date.now() - lastRotatedAt >= TOKEN_ROTATE_INTERVAL_MS;
+}
+
+function enforcePerSessionRate(key, limitPerMinute) {
+  const now = Date.now();
+  const bucket = perSessionUsageStore.get(key) || {
+    resetAt: now + 60_000,
+    count: 0
+  };
+  if (now > bucket.resetAt) {
+    bucket.resetAt = now + 60_000;
+    bucket.count = 0;
+  }
+  bucket.count += 1;
+  perSessionUsageStore.set(key, bucket);
+  return bucket.count <= limitPerMinute;
 }
 
 async function upsertUser(userName) {
@@ -450,36 +526,47 @@ async function upsertUser(userName) {
   });
 }
 
-async function createRoom(ownerName, roomTitle, roomPassword) {
+async function createRoom(ownerName, roomTitle, roomPassword, roomPin) {
   const owner = await upsertUser(ownerName);
   return withFileLock(FILES.rooms, async () => {
-    const rooms = await readJson(FILES.rooms, []);
+    let rooms = await readJson(FILES.rooms, []);
+    rooms = pruneRooms(rooms);
     let roomCode = generateRoomCode();
 
     while (rooms.some((item) => item.code === roomCode)) {
       roomCode = generateRoomCode();
     }
 
+    const inviteToken = buildInviteToken();
     const room = {
       id: generateId("room_"),
       code: roomCode,
       title: normalizeName(roomTitle, "جلسه جدید"),
       passwordHash: hashRoomPassword(roomPassword),
+      pinHash: hashRoomPassword(roomPin),
       ownerId: owner.id,
       createdAt: new Date().toISOString(),
       participants: [],
-      signals: []
+      signals: [],
+      invites: [
+        {
+          tokenHash: hashRoomPassword(inviteToken),
+          expiresAt: new Date(Date.now() + INVITE_TOKEN_TTL_MS).toISOString(),
+          used: false
+        }
+      ]
     };
 
     rooms.push(room);
     await writeJson(FILES.rooms, rooms);
-    return { room, owner };
+    return { room, owner, inviteToken };
   });
 }
 
-async function joinRoom(roomCode, userName, roomPassword) {
+async function joinRoom(roomCode, userName, roomPassword, roomPin, inviteToken) {
   return withFileLock(FILES.rooms, async () => {
-    const rooms = await readJson(FILES.rooms, []);
+    let rooms = await readJson(FILES.rooms, []);
+    rooms = pruneRooms(rooms);
     const room = rooms.find((item) => item.code === normalizeRoomCode(roomCode));
 
     if (!room) {
@@ -488,6 +575,19 @@ async function joinRoom(roomCode, userName, roomPassword) {
     if (!verifyRoomPassword(roomPassword, room.passwordHash)) {
       return { error: "invalid_password" };
     }
+    if (!verifyRoomPassword(roomPin, room.pinHash)) {
+      return { error: "invalid_pin" };
+    }
+    const activeInvite = (room.invites || []).find(
+      (invite) =>
+        !invite.used &&
+        new Date(invite.expiresAt).getTime() > Date.now() &&
+        verifyRoomPassword(inviteToken, invite.tokenHash)
+    );
+    if (!activeInvite) {
+      return { error: "invalid_invite" };
+    }
+    activeInvite.used = true;
     const user = await upsertUser(userName);
 
     sanitizeRoomState(room);
@@ -502,7 +602,9 @@ async function joinRoom(roomCode, userName, roomPassword) {
       name: user.name,
       joinedAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
-      authToken
+      authToken,
+      authIssuedAt: new Date().toISOString(),
+      lastRotatedAt: new Date().toISOString()
     };
 
     room.participants = (room.participants || []).filter((item) => item.userId !== user.id);
@@ -525,7 +627,8 @@ async function joinRoom(roomCode, userName, roomPassword) {
 
 async function getRoomByCode(roomCode) {
   return withFileLock(FILES.rooms, async () => {
-    const rooms = await readJson(FILES.rooms, []);
+    let rooms = await readJson(FILES.rooms, []);
+    rooms = pruneRooms(rooms);
     const room = rooms.find((item) => item.code === normalizeRoomCode(roomCode));
 
     if (!room) {
@@ -606,6 +709,28 @@ async function consumeSignals(roomCode, sessionId) {
   return delivered;
 }
 
+async function maybeRotateAuthToken(roomCode, sessionId) {
+  let nextToken = "";
+  await updateRoom(roomCode, (room) => {
+    room.participants = (room.participants || []).map((item) => {
+      if (item.sessionId !== sessionId) {
+        return item;
+      }
+      if (!shouldRotateToken(item)) {
+        return item;
+      }
+      nextToken = buildParticipantToken();
+      return {
+        ...item,
+        authToken: nextToken,
+        lastRotatedAt: new Date().toISOString(),
+        authIssuedAt: item.authIssuedAt || new Date().toISOString()
+      };
+    });
+  });
+  return nextToken;
+}
+
 async function addMessage(roomCode, message) {
   await withFileLock(FILES.messages, async () => {
     const messages = await readJson(FILES.messages, []);
@@ -681,7 +806,11 @@ async function handleApi(request, response, urlObject) {
       httpPort: PORT,
       httpsPort: HTTPS_PORT,
       stunPort: STUN_PORT,
-      httpsEnabled: Boolean(loadTlsOptions())
+      httpsEnabled: Boolean(loadTlsOptions()),
+      turnUrls: TURN_URLS,
+      turnUsername: TURN_USERNAME,
+      turnCredential: TURN_CREDENTIAL,
+      forceRelay: FORCE_TURN_RELAY
     });
     return;
   }
@@ -691,11 +820,14 @@ async function handleApi(request, response, urlObject) {
     const ownerName = normalizeName(body.ownerName, "");
     const roomTitle = normalizeName(body.roomTitle, "جلسه جدید");
     const roomPassword = normalizePassword(body.roomPassword);
+    const roomPin = normalizePin(body.roomPin);
     assert(ownerName, "نام سازنده لازم است.");
     assert(roomTitle, "عنوان جلسه لازم است.");
+    assert(!hasBlockedMarkup(ownerName) && !hasBlockedMarkup(roomTitle), "ورودی شامل تگ غیرمجاز است.");
     assert(isStrongPassword(roomPassword), "رمز روم باید حداقل ۸ کاراکتر و شامل حرف، عدد و نماد باشد.");
-    const { room, owner } = await createRoom(ownerName, roomTitle, roomPassword);
-    sendJson(response, 201, { room: sanitizeRoomForClient(room), owner });
+    assert(roomPin.length >= 4, "PIN روم باید حداقل ۴ رقم باشد.");
+    const { room, owner, inviteToken } = await createRoom(ownerName, roomTitle, roomPassword, roomPin);
+    sendJson(response, 201, { room: sanitizeRoomForClient(room), owner, inviteToken });
     return;
   }
 
@@ -703,18 +835,23 @@ async function handleApi(request, response, urlObject) {
     const body = await parseBody(request);
     assert(normalizeRoomCode(body.roomCode), "کد اتاق معتبر نیست.");
     assert(normalizeName(body.userName, ""), "نام کاربر لازم است.");
+    assert(!hasBlockedMarkup(body.userName), "ورودی شامل تگ غیرمجاز است.");
     const roomPassword = normalizePassword(body.roomPassword);
+    const roomPin = normalizePin(body.roomPin);
+    const inviteToken = String(body.inviteToken || "").trim();
     assert(roomPassword.length >= 8, "رمز روم معتبر نیست.");
+    assert(roomPin.length >= 4, "PIN روم معتبر نیست.");
+    assert(inviteToken.length >= 8, "لینک دعوت معتبر نیست.");
     if (isRoomJoinBlocked(request, body.roomCode)) {
       sendJson(response, 429, { error: "تلاش‌های ناموفق زیاد بوده است. چند دقیقه دیگر دوباره تلاش کنید." });
       return;
     }
-    const result = await joinRoom(body.roomCode, body.userName, roomPassword);
+    const result = await joinRoom(body.roomCode, body.userName, roomPassword, roomPin, inviteToken);
 
     if (result.error) {
-      if (result.error === "invalid_password") {
+      if (["invalid_password", "invalid_pin", "invalid_invite"].includes(result.error)) {
         registerFailedRoomJoin(request, body.roomCode);
-        sendJson(response, 403, { error: "رمز روم نادرست است." });
+        sendJson(response, 403, { error: "اطلاعات ورود (رمز/ PIN / دعوت) معتبر نیست." });
         return;
       }
       if (result.error === "room_full") {
@@ -745,9 +882,11 @@ async function handleApi(request, response, urlObject) {
       return;
     }
 
+    const renewedAuthToken = await maybeRotateAuthToken(roomCode, sessionId);
     sendJson(response, 200, {
       room: sanitizeRoomForClient(room),
-      messages: await getMessages(room.code)
+      messages: await getMessages(room.code),
+      renewedAuthToken
     });
     return;
   }
@@ -796,6 +935,11 @@ async function handleApi(request, response, urlObject) {
       sendJson(response, 403, { error: "مجوز ارسال سیگنال معتبر نیست." });
       return;
     }
+    assert(
+      enforcePerSessionRate(`${roomCode}:${body.fromSessionId}:signals`, SIGNAL_PER_MINUTE_LIMIT),
+      "نرخ ارسال سیگنال بیش از حد مجاز است.",
+      429
+    );
     const receiver = (room.participants || []).find((item) => item.sessionId === body.toSessionId);
     if (!receiver) {
       sendJson(response, 404, { error: "گیرنده سیگنال در اتاق حاضر نیست." });
@@ -809,7 +953,8 @@ async function handleApi(request, response, urlObject) {
     };
 
     await addSignal(roomCode, signal);
-    sendJson(response, 200, { ok: true });
+    const renewedAuthToken = await maybeRotateAuthToken(roomCode, body.fromSessionId);
+    sendJson(response, 200, { ok: true, renewedAuthToken });
     return;
   }
 
@@ -834,7 +979,8 @@ async function handleApi(request, response, urlObject) {
       return;
     }
     const signals = await consumeSignals(roomCode, sessionId);
-    sendJson(response, 200, { signals });
+    const renewedAuthToken = await maybeRotateAuthToken(roomCode, sessionId);
+    sendJson(response, 200, { signals, renewedAuthToken });
     return;
   }
 
@@ -845,6 +991,7 @@ async function handleApi(request, response, urlObject) {
     assert(String(body.sessionId || "").trim(), "شناسه نشست لازم است.");
     assert(String(body.authToken || "").trim(), "مجوز نشست لازم است.");
     const text = String(body.text || "").trim().slice(0, 400);
+    assert(!hasBlockedMarkup(text), "ورودی شامل تگ غیرمجاز است.");
     if (!text) {
       sendJson(response, 400, { error: "متن پیام خالی است." });
       return;
@@ -859,12 +1006,18 @@ async function handleApi(request, response, urlObject) {
       sendJson(response, 403, { error: "مجوز ارسال پیام معتبر نیست." });
       return;
     }
+    assert(
+      enforcePerSessionRate(`${roomCode}:${body.sessionId}:messages`, MESSAGE_PER_MINUTE_LIMIT),
+      "نرخ ارسال پیام بیش از حد مجاز است.",
+      429
+    );
     await addMessage(roomCode, {
       sessionId: body.sessionId,
       sender: participant.name,
       text
     });
-    sendJson(response, 201, { ok: true });
+    const renewedAuthToken = await maybeRotateAuthToken(roomCode, body.sessionId);
+    sendJson(response, 201, { ok: true, renewedAuthToken });
     return;
   }
 
@@ -893,7 +1046,8 @@ async function handleApi(request, response, urlObject) {
       sendJson(response, 403, { error: "مجوز نشست معتبر نیست." });
       return;
     }
-    sendJson(response, 200, { ok: true });
+    const renewedAuthToken = await maybeRotateAuthToken(roomCode, body.sessionId);
+    sendJson(response, 200, { ok: true, renewedAuthToken });
     return;
   }
 
@@ -903,6 +1057,13 @@ async function handleApi(request, response, urlObject) {
 async function requestHandler(request, response) {
   const urlObject = new URL(request.url, `http://${request.headers.host || "localhost"}`);
   setSecurityHeaders(response, request.socket?.encrypted === true);
+  const enforceHttps = process.env.ENFORCE_HTTPS !== "false";
+  if (enforceHttps && request.socket?.encrypted !== true) {
+    sendJson(response, 426, {
+      error: "اتصال ناامن مجاز نیست. فقط HTTPS پشتیبانی می‌شود."
+    });
+    return;
+  }
 
   if (request.method === "OPTIONS") {
     response.writeHead(204);
@@ -918,6 +1079,10 @@ async function requestHandler(request, response) {
 
     if (urlObject.pathname.startsWith("/api/")) {
       await handleApi(request, response, urlObject);
+      return;
+    }
+    if (urlObject.pathname.startsWith("/data")) {
+      sendJson(response, 403, { error: "Forbidden" });
       return;
     }
 
@@ -938,18 +1103,21 @@ async function requestHandler(request, response) {
 
 async function start() {
   await ensureStorage();
-  const httpServer = http.createServer(requestHandler);
+  const enforceHttps = process.env.ENFORCE_HTTPS !== "false";
+  const httpServer = enforceHttps ? null : http.createServer(requestHandler);
   const stunServer = createStunServer();
-  httpServer.on("error", (error) => {
+  httpServer?.on("error", (error) => {
     console.error(`Server failed to start: ${error.message}`);
     process.exitCode = 1;
   });
-  httpServer.requestTimeout = 15_000;
-  httpServer.headersTimeout = 20_000;
-  httpServer.keepAliveTimeout = 5_000;
-  httpServer.listen(PORT, HOST, () => {
-    console.log(`Local meeting app running at http://${HOST}:${PORT}`);
-  });
+  if (httpServer) {
+    httpServer.requestTimeout = 15_000;
+    httpServer.headersTimeout = 20_000;
+    httpServer.keepAliveTimeout = 5_000;
+    httpServer.listen(PORT, HOST, () => {
+      console.log(`Local meeting app running at http://${HOST}:${PORT}`);
+    });
+  }
   try {
     stunServer.bind(STUN_PORT, HOST, () => {
       console.log(`Local STUN server running at udp://${HOST}:${STUN_PORT}`);
@@ -966,7 +1134,8 @@ async function start() {
     httpsServer = https.createServer(
       {
         key: tlsOptions.key,
-        cert: tlsOptions.cert
+        cert: tlsOptions.cert,
+        minVersion: "TLSv1.3"
       },
       requestHandler
     );
@@ -981,13 +1150,13 @@ async function start() {
       console.log(`Secure local meeting app running at https://${HOST}:${HTTPS_PORT}`);
     });
   } else {
-    console.log(
-      "HTTPS is disabled. Add certs/server.key and certs/server.crt for camera, microphone, and screen sharing on LAN."
-    );
+    console.log("HTTPS certs are required. Add certs/server.key and certs/server.crt.");
+    process.exitCode = 1;
+    throw new Error("HTTPS certificates are required.");
   }
 
   const shutdown = () => {
-    httpServer.close();
+    httpServer?.close();
     httpsServer?.close();
     stunServer.close();
   };

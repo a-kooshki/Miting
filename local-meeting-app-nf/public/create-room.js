@@ -24,8 +24,13 @@ form.addEventListener("submit", async (event) => {
   const ownerName = String(formData.get("ownerName") || "").trim();
   const roomTitle = String(formData.get("roomTitle") || "").trim();
   const roomPassword = String(formData.get("roomPassword") || "").trim();
+  const roomPin = String(formData.get("roomPin") || "").replace(/\D/g, "");
   if (roomPassword.length < 8) {
     setStatus("رمز روم باید حداقل ۸ کاراکتر باشد.", "status-error");
+    return;
+  }
+  if (roomPin.length < 4) {
+    setStatus("PIN ورود باید حداقل ۴ رقم باشد.", "status-error");
     return;
   }
 
@@ -33,14 +38,14 @@ form.addEventListener("submit", async (event) => {
     setStatus("در حال ساخت روم...");
     const data = await api("/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ ownerName, roomTitle, roomPassword })
+      body: JSON.stringify({ ownerName, roomTitle, roomPassword, roomPin })
     });
     sessionStorage.setItem(
       "meetingSession",
-      JSON.stringify({ roomCode: data.room.code, userName: ownerName })
+      JSON.stringify({ roomCode: data.room.code, userName: ownerName, inviteToken: data.inviteToken })
     );
     setStatus(`روم ساخته شد. کد روم: ${data.room.code}`, "status-success");
-    window.location.href = `/join-room.html?code=${encodeURIComponent(data.room.code)}`;
+    window.location.href = `/join-room.html?code=${encodeURIComponent(data.room.code)}&token=${encodeURIComponent(data.inviteToken)}`;
   } catch (error) {
     setStatus(error.message, "status-error");
   }

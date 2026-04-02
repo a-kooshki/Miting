@@ -151,7 +151,7 @@ function updateSecureBadge() {
 }
 
 function setInviteLink() {
-  const inviteUrl = `${location.origin}/join-room.html?code=${encodeURIComponent(roomCode)}`;
+  const inviteUrl = `${location.origin}/login.html?code=${encodeURIComponent(roomCode)}`;
   inviteLinkText.textContent = inviteUrl;
   inviteLinkText.title = inviteUrl;
 }
@@ -880,7 +880,7 @@ window.addEventListener("online", () => {
 
 async function init() {
   if (!roomCode || !userName || !sessionSeed.authToken || !sessionSeed.participantSessionId || !sessionSeed.roomKey) {
-    window.location.href = `/join-room.html?code=${encodeURIComponent(roomCode || "")}`;
+    window.location.href = `/login.html?code=${encodeURIComponent(roomCode || "")}`;
     return;
   }
 
@@ -894,7 +894,7 @@ async function init() {
   currentUserNameEl.textContent = userName;
   state.roomCryptoKey = await importRoomCryptoKey();
   if (!state.roomCryptoKey) {
-    window.location.href = `/join-room.html?code=${encodeURIComponent(roomCode || "")}`;
+    window.location.href = `/login.html?code=${encodeURIComponent(roomCode || "")}`;
     return;
   }
   state.authToken = sessionSeed.authToken;

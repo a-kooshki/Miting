@@ -40,7 +40,7 @@ form.addEventListener("submit", async (event) => {
       JSON.stringify({ roomCode: data.room.code, userName: ownerName })
     );
     setStatus(`روم ساخته شد. کد روم: ${data.room.code}`, "status-success");
-    window.location.href = `/join-room.html?code=${encodeURIComponent(data.room.code)}`;
+    window.location.href = `/login.html?code=${encodeURIComponent(data.room.code)}`;
   } catch (error) {
     setStatus(error.message, "status-error");
   }

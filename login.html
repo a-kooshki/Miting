@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login</title>
+  <style>
+    html , body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: sans-serif;
+      color: white;
+      background: #121212;
+    }
+
+    canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 0;
+    }
+
+    .login-box {
+      background: #1b1b1b9c;
+      padding: 30px 40px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #4caf50;
+      width: 300px;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    h2 { 
+      color: #ffffff;
+      border-bottom: 2px solid #369B5F ;
+      padding-bottom: 8px;
+      margin-bottom: 1px;
+      font-family: 'Trebuchet MS', Arial, sans-serif;
+    }
+    input {
+      width: 98%; padding: 9px 0px; margin: 10px 0;
+      background: #2a2a2a; border: 1px solid #555; color: white; border-radius: 5px;
+    }
+    button {
+      flex: 1;
+     background: linear-gradient(135deg, #1a593a, #2db36e);
+     color: rgb(0, 0, 0);
+     border: none;
+     border-radius: 14px;
+     padding: 12px 20px;
+     min-width: 290px;
+     cursor: pointer;
+     font-weight: bold;
+     box-shadow: 0 0 10px rgba(63, 207, 90, 0.3);
+     transition: all 0.3s ease;
+     margin-top: 20px;
+     font-family: 'Trebuchet MS', Arial, sans-serif;
+     margin-bottom: 20px;
+    }
+     
+
+    button:hover {background: linear-gradient(135deg, #2db36e, #1a593a);
+      transform: scale(1.05);}
+    a { color: #4caf50; text-decoration: none; font-size: 0.9em; font-family: 'Trebuchet MS', Arial, sans-serif; }
+    p {font-family: 'Trebuchet MS', Arial, sans-serif;}
+    .custom-cursor {
+      width: 6px;
+      height: 6px;
+      background-color: #369B5F;
+      border-radius: 50%;
+      position: fixed;
+      pointer-events: none;
+      z-index: 3;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 8px #369B5F;
+    }
+  </style>
+</head>
+<body>
+  <div class="custom-cursor"></div>
+  <canvas id="canvas"></canvas>
+  <form class="login-box" method="POST" action="/login">
+    <h2>Login to GEEKOGraph</h2>
+    <input type="text" name="username" placeholder="Username" autocomplete="username" autocapitalize="none" required />
+    <input type="password" name="password" placeholder="Password" autocomplete="current-password" required />
+    <button type="submit">Login</button>
+    <p>Don't have an account? <a href="/register.html">Register</a></p>
+  </form>
+
+  <script>
+    let value;
+
+      if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+        value = 70; 
+      } else {
+        value = 200; 
+      }
+
+      console.log("Value:", value);
+
+
+
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('error')) {
+      const msg = decodeURIComponent(params.get('error'));
+      const p = document.createElement('p');
+      p.style.color = 'red';
+      p.style.marginBottom = '10px';
+      p.textContent = msg;
+      document.querySelector('form').prepend(p);
+    }
+    if (params.has('msg')) {
+      const msg = decodeURIComponent(params.get('msg'));
+      const p = document.createElement('p');
+      p.style.color = '#69f08b';
+      p.style.marginBottom = '10px';
+      p.textContent = msg;
+      document.querySelector('form').prepend(p);
+    }
+
+    // Particle Background Script
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let particles = [];
+    const mouse = { x: null, y: null };
+
+    window.addEventListener('mousemove', (e) => {
+      mouse.x = e.x;
+      mouse.y = e.y;
+    });
+
+    class Particle {
+      constructor() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.size = Math.random() * 1.5 + 0.5;
+        this.speedX = Math.random() * 0.6 - 0.3;
+        this.speedY = Math.random() * 0.6 - 0.3;
+      }
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        if (this.x > canvas.width || this.x < 0) this.speedX *= -1;
+        if (this.y > canvas.height || this.y < 0) this.speedY *= -1;
+      }
+      draw() {
+        ctx.fillStyle = '#39ff14';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function init() {
+      particles = [];
+      for (let i = 0; i < value; i++) {
+        particles.push(new Particle());
+      }
+    }
+
+    function connect() {
+      for (let a = 0; a < particles.length; a++) {
+        for (let b = a; b < particles.length; b++) {
+          const dx = particles[a].x - particles[b].x;
+          const dy = particles[a].y - particles[b].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 80) {
+            ctx.strokeStyle = '#369B5F';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(particles[a].x, particles[a].y);
+            ctx.lineTo(particles[b].x, particles[b].y);
+            ctx.stroke();
+          }
+        }
+        const dxMouse = particles[a].x - mouse.x;
+        const dyMouse = particles[a].y - mouse.y;
+        const distMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse);
+        if (distMouse < 100) {
+          ctx.strokeStyle = '#369B5F';
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(particles[a].x, particles[a].y);
+          ctx.lineTo(mouse.x, mouse.y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => {
+        p.update();
+        p.draw();
+      });
+      connect();
+      requestAnimationFrame(animate);
+    }
+
+    init();
+    animate();
+
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      init();
+    });
+  </script>
+  <script>
+    const cursor = document.querySelector('.custom-cursor');
+
+    document.addEventListener('mousemove', (e) => {
+      cursor.style.left = e.clientX + 'px';
+      cursor.style.top = e.clientY + 'px';
+    });
+ </script>
+</body>
+</html>

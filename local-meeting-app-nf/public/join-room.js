@@ -7,7 +7,7 @@ const saved = JSON.parse(sessionStorage.getItem("meetingSession") || "{}");
 form.elements.userName.value = saved.userName || "";
 form.elements.roomCode.value = (params.get("code") || saved.roomCode || "").toUpperCase();
 form.elements.roomPassword.value = saved.roomPassword || "";
-form.elements.inviteToken.value = params.get("token") || params.get("inviteToken") || saved.inviteToken || "";
+form.elements.accessCode.value = "";
 
 function setStatus(message, type = "") {
   statusText.textContent = message;
@@ -69,13 +69,15 @@ form.addEventListener("submit", async (event) => {
   const userName = String(formData.get("userName") || "").trim();
   const roomCode = String(formData.get("roomCode") || "").trim().toUpperCase();
   const roomPassword = String(formData.get("roomPassword") || "").trim();
-  const inviteToken = String(formData.get("inviteToken") || "").trim();
+  const accessCode = String(formData.get("accessCode") || "")
+    .replace(/\D/g, "")
+    .slice(0, 4);
   if (roomPassword.length < 8) {
     setStatus("رمز روم باید حداقل ۸ کاراکتر باشد.", "status-error");
     return;
   }
-  if (!inviteToken) {
-    setStatus("توکن دعوت الزامی است.", "status-error");
+  if (accessCode.length !== 4) {
+    setStatus("کد دسترسی ۴ رقمی معتبر نیست.", "status-error");
     return;
   }
 
@@ -83,7 +85,7 @@ form.addEventListener("submit", async (event) => {
     setStatus("در حال بررسی و ورود...");
     const data = await api("/api/rooms/join", {
       method: "POST",
-      body: JSON.stringify({ userName, roomCode, roomPassword, inviteToken })
+      body: JSON.stringify({ userName, roomCode, roomPassword, accessCode })
     });
     const roomKey = await deriveRoomKey(roomPassword, roomCode);
 
@@ -94,8 +96,7 @@ form.addEventListener("submit", async (event) => {
         userName,
         authToken: data.authToken,
         participantSessionId: data.participant?.sessionId,
-        roomKey,
-        inviteToken
+        roomKey
       })
     );
 

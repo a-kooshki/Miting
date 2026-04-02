@@ -134,8 +134,7 @@ function persistSession() {
       userName,
       authToken: state.authToken,
       participantSessionId: state.participant?.sessionId,
-      roomKey: sessionSeed.roomKey,
-      inviteToken: sessionSeed.inviteToken
+      roomKey: sessionSeed.roomKey
     })
   );
 }
@@ -152,7 +151,7 @@ function updateSecureBadge() {
 }
 
 function setInviteLink() {
-  const inviteUrl = `${location.origin}/join-room.html?code=${encodeURIComponent(roomCode)}&token=${encodeURIComponent(sessionSeed.inviteToken || "")}`;
+  const inviteUrl = `${location.origin}/join-room.html?code=${encodeURIComponent(roomCode)}`;
   inviteLinkText.textContent = inviteUrl;
   inviteLinkText.title = inviteUrl;
 }

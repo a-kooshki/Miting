@@ -37,10 +37,10 @@ form.addEventListener("submit", async (event) => {
     });
     sessionStorage.setItem(
       "meetingSession",
-      JSON.stringify({ roomCode: data.room.code, userName: ownerName, inviteToken: data.inviteToken })
+      JSON.stringify({ roomCode: data.room.code, userName: ownerName })
     );
     setStatus(`روم ساخته شد. کد روم: ${data.room.code}`, "status-success");
-    window.location.href = `/join-room.html?code=${encodeURIComponent(data.room.code)}&token=${encodeURIComponent(data.inviteToken)}`;
+    window.location.href = `/join-room.html?code=${encodeURIComponent(data.room.code)}`;
   } catch (error) {
     setStatus(error.message, "status-error");
   }

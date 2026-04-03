@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Graph | اتاق جلسه</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="room-body">
+    <div class="room-shell">
+      <aside class="sidebar card">
+        <div class="room-header">
+          <div>
+            <span class="badge" id="roomCodeBadge">---</span>
+            <h1 id="roomTitle">Graph Room</h1>
+          </div>
+          <button id="leaveBtn" class="danger">خروج</button>
+        </div>
+
+        <div class="stack compact">
+          <div class="info-box"><span>کاربر جاری</span><strong id="currentUserName">---</strong></div>
+          <div class="info-box"><span>حاضرین</span><strong id="participantCount">0 نفر</strong></div>
+          <div class="info-box"><span>حالت شبکه</span><strong>Private LAN</strong></div>
+        </div>
+
+        <div class="invite-box">
+          <div><span>لینک دعوت</span><strong id="inviteLinkText">---</strong></div>
+          <button id="copyInviteBtn" class="secondary">کپی</button>
+        </div>
+
+        <div class="controls">
+          <button id="toggleAudioBtn">میکروفون</button>
+          <button id="toggleVideoBtn">دوربین</button>
+          <button id="shareScreenBtn" class="secondary">اشتراک صفحه</button>
+          <button id="retryMediaBtn" class="ghost">بازیابی رسانه</button>
+        </div>
+
+        <section>
+          <h2>شرکت‌کنندگان</h2>
+          <ul id="participantsList" class="participant-list"></ul>
+        </section>
+
+        <section>
+          <h2>چت امن</h2>
+          <div id="messages" class="messages"></div>
+          <form id="chatForm" class="chat-form">
+            <input id="chatInput" type="text" maxlength="400" placeholder="پیام..." required />
+            <button type="submit">ارسال</button>
+          </form>
+        </section>
+      </aside>
+
+      <main class="meeting-area">
+        <section class="video-toolbar card">
+          <div>
+            <h2>جلسه زنده Graph</h2>
+            <p id="connectionHint">در حال آماده‌سازی رسانه...</p>
+          </div>
+          <div class="toolbar-actions">
+            <span id="secureStateBadge" class="status-pill">در حال بررسی اتصال</span>
+            <button id="openSecureBtn" class="ghost compact-btn" hidden>نسخه امن</button>
+          </div>
+        </section>
+
+        <section id="videoGrid" class="video-grid">
+          <article class="video-card local">
+            <video id="localVideo" autoplay playsinline muted></video>
+            <div class="video-label">شما</div>
+          </article>
+          <article id="emptyRemoteState" class="video-card placeholder">با ورود کاربران جدید، تصویر آن‌ها اینجا نمایش داده می‌شود.</article>
+        </section>
+      </main>
+    </div>
+
+    <script src="/room.js"></script>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "msg_405f73ff9689",
+    "createdAt": "2026-03-29T16:11:59.045Z",
+    "roomCode": "4C2FD5",
+    "sessionId": "ses_71a5fee98730",
+    "sender": "Guest",
+    "text": "G"
+  },
+  {
+    "id": "msg_d6ee45b6461f",
+    "createdAt": "2026-03-29T19:50:59.625Z",
+    "roomCode": "177D16",
+    "sessionId": "ses_7c22493f46f6",
+    "sender": "علیرضا",
+    "text": "G"
+  },
+  {
+    "id": "msg_f350712d4e3e",
+    "createdAt": "2026-03-29T19:52:01.702Z",
+    "roomCode": "177D16",
+    "sessionId": "ses_8c323957c917",
+    "sender": "Esi",
+    "text": "G"
+  },
+  {
+    "id": "msg_4d133d1d24c0",
+    "createdAt": "2026-03-29T19:54:14.858Z",
+    "roomCode": "177D16",
+    "sessionId": "ses_603baec7d34f",
+    "sender": "علیرضا",
+    "text": "عناع"
+  },
+  {
+    "id": "msg_7d1b0b98cb6f",
+    "createdAt": "2026-03-30T10:52:36.610Z",
+    "roomCode": "F07BD8",
+    "sessionId": "ses_000b564965c6",
+    "sender": "جابر",
+    "text": "Salam"
+  },
+  {
+    "id": "msg_cf0c586115b1",
+    "createdAt": "2026-03-30T10:52:51.637Z",
+    "roomCode": "F07BD8",
+    "sessionId": "ses_8ea55b591cae",
+    "sender": "Guest",
+    "text": "Jdisjej"
+  },
+  {
+    "id": "msg_d93922ea1279",
+    "createdAt": "2026-04-02T21:02:26.741Z",
+    "roomCode": "E1A9F5",
+    "sessionId": "ses_7aa4bf28738f",
+    "sender": "asdfg",
+    "text": "jik"
+  }
+]

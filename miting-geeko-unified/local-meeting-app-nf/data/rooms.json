@@ -1,0 +1,143 @@
+[
+  {
+    "id": "room_e68dbb586cec",
+    "code": "E40E6B",
+    "title": "R",
+    "ownerId": "usr_7341e0570eaf",
+    "createdAt": "2026-03-29T16:02:58.777Z",
+    "participants": [
+      {
+        "sessionId": "ses_c910450e90c0",
+        "userId": "usr_7341e0570eaf",
+        "name": "A",
+        "joinedAt": "2026-03-29T16:02:58.780Z",
+        "lastActiveAt": "2026-03-29T16:02:58.788Z"
+      },
+      {
+        "sessionId": "ses_423f8bb44fa7",
+        "userId": "usr_3dc7079b7c6d",
+        "name": "B",
+        "joinedAt": "2026-03-29T16:02:58.782Z",
+        "lastActiveAt": "2026-03-29T16:02:58.789Z"
+      }
+    ],
+    "signals": [
+      {
+        "id": "sig_9caaa9572527",
+        "createdAt": "2026-03-29T16:02:58.784Z",
+        "consumed": true,
+        "type": "offer",
+        "fromSessionId": "ses_c910450e90c0",
+        "toSessionId": "ses_423f8bb44fa7",
+        "payload": {
+          "sdp": "1"
+        }
+      },
+      {
+        "id": "sig_19177d40e864",
+        "createdAt": "2026-03-29T16:02:58.785Z",
+        "consumed": true,
+        "type": "ice-candidate",
+        "fromSessionId": "ses_c910450e90c0",
+        "toSessionId": "ses_423f8bb44fa7",
+        "payload": {
+          "candidate": "2"
+        }
+      },
+      {
+        "id": "sig_cc0725512a72",
+        "createdAt": "2026-03-29T16:02:58.785Z",
+        "consumed": true,
+        "type": "answer",
+        "fromSessionId": "ses_423f8bb44fa7",
+        "toSessionId": "ses_c910450e90c0",
+        "payload": {
+          "sdp": "3"
+        }
+      },
+      {
+        "id": "sig_3e61cc75ae2c",
+        "createdAt": "2026-03-29T16:02:58.786Z",
+        "consumed": true,
+        "type": "ice-candidate",
+        "fromSessionId": "ses_423f8bb44fa7",
+        "toSessionId": "ses_c910450e90c0",
+        "payload": {
+          "candidate": "4"
+        }
+      }
+    ]
+  },
+  {
+    "id": "room_fb9c504f2e70",
+    "code": "4C2FD5",
+    "title": "Jsjs",
+    "ownerId": "usr_94b2ff8fa975",
+    "createdAt": "2026-03-29T16:05:48.875Z",
+    "participants": [],
+    "signals": []
+  },
+  {
+    "id": "room_9fec00fd86e3",
+    "code": "177D16",
+    "title": "باشت",
+    "ownerId": "usr_94b2ff8fa975",
+    "createdAt": "2026-03-29T19:48:57.152Z",
+    "participants": [],
+    "signals": []
+  },
+  {
+    "id": "room_55d93e01b082",
+    "code": "F07BD8",
+    "title": "Uip",
+    "ownerId": "usr_94b2ff8fa975",
+    "createdAt": "2026-03-30T10:42:07.403Z",
+    "participants": [
+      {
+        "sessionId": "ses_2346c810d9a0",
+        "userId": "usr_60ed87fd0e1e",
+        "name": "Guest",
+        "joinedAt": "2026-03-31T10:29:44.080Z",
+        "lastActiveAt": "2026-03-31T10:31:07.417Z",
+        "authToken": "67690abe650b042d09fb64311db53c783fced508179740d8"
+      }
+    ],
+    "signals": []
+  },
+  {
+    "id": "room_ff0597493afa",
+    "code": "3F9668",
+    "title": "باشت",
+    "ownerId": "usr_94b2ff8fa975",
+    "createdAt": "2026-03-30T23:17:50.928Z",
+    "participants": [],
+    "signals": []
+  },
+  {
+    "id": "room_df7c5235f12f",
+    "code": "40672C",
+    "title": "جلسه کمیته",
+    "ownerId": "usr_94b2ff8fa975",
+    "createdAt": "2026-03-30T23:27:01.629Z",
+    "participants": [],
+    "signals": []
+  },
+  {
+    "id": "room_1fb63ad58be3",
+    "code": "E1A9F5",
+    "title": "iran",
+    "ownerId": "usr_76c7991c860e",
+    "createdAt": "2026-04-02T20:58:43.654Z",
+    "participants": [
+      {
+        "sessionId": "ses_6b5efbf615d2",
+        "userId": "usr_76c7991c860e",
+        "name": "asdfg",
+        "joinedAt": "2026-04-02T21:04:24.617Z",
+        "lastActiveAt": "2026-04-02T21:05:24.684Z",
+        "authToken": "a9ebeee478d25b5f14a05910272ac66dffd1463f3ccb0747"
+      }
+    ],
+    "signals": []
+  }
+]

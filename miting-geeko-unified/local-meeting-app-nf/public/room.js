@@ -1,0 +1,778 @@
+const params = new URLSearchParams(window.location.search);
+const sessionSeed = JSON.parse(sessionStorage.getItem("meetingSession") || "{}");
+const roomCode = (params.get("code") || sessionSeed.roomCode || "").toUpperCase();
+const userName = params.get("name") || sessionSeed.userName || "Guest";
+
+const state = {
+  room: null,
+  participant: null,
+  authToken: "",
+  participants: [],
+  localStream: null,
+  screenStream: null,
+  peerConnections: new Map(),
+  pendingCandidates: new Map(),
+  refreshTimer: null,
+  signalTimer: null,
+  config: null,
+  joined: false,
+  messagesLoaded: false,
+  renderedMessageCount: 0
+};
+
+const roomTitleEl = document.getElementById("roomTitle");
+const roomCodeBadgeEl = document.getElementById("roomCodeBadge");
+const currentUserNameEl = document.getElementById("currentUserName");
+const participantCountEl = document.getElementById("participantCount");
+const participantsListEl = document.getElementById("participantsList");
+const messagesEl = document.getElementById("messages");
+const chatForm = document.getElementById("chatForm");
+const chatInput = document.getElementById("chatInput");
+const localVideo = document.getElementById("localVideo");
+const videoGrid = document.getElementById("videoGrid");
+const emptyRemoteStateEl = document.getElementById("emptyRemoteState");
+const connectionHint = document.getElementById("connectionHint");
+const toggleAudioBtn = document.getElementById("toggleAudioBtn");
+const toggleVideoBtn = document.getElementById("toggleVideoBtn");
+const shareScreenBtn = document.getElementById("shareScreenBtn");
+const retryMediaBtn = document.getElementById("retryMediaBtn");
+const leaveBtn = document.getElementById("leaveBtn");
+const copyInviteBtn = document.getElementById("copyInviteBtn");
+const inviteLinkText = document.getElementById("inviteLinkText");
+const secureStateBadge = document.getElementById("secureStateBadge");
+const openSecureBtn = document.getElementById("openSecureBtn");
+
+function setHint(text) {
+  connectionHint.textContent = text;
+}
+
+function persistSession() {
+  sessionStorage.setItem(
+    "meetingSession",
+    JSON.stringify({
+      roomCode,
+      userName,
+      authToken: state.authToken
+    })
+  );
+}
+
+function updateSecureBadge() {
+  if (window.isSecureContext) {
+    secureStateBadge.textContent = "اتصال امن فعال";
+    secureStateBadge.className = "status-pill success";
+    return;
+  }
+
+  secureStateBadge.textContent = "اتصال ناامن";
+  secureStateBadge.className = "status-pill warning";
+}
+
+function setInviteLink() {
+  const inviteUrl = `${location.origin}/room.html?code=${encodeURIComponent(roomCode)}`;
+  inviteLinkText.textContent = inviteUrl;
+  inviteLinkText.title = inviteUrl;
+}
+
+function toggleEmptyRemoteState() {
+  const remoteCardsCount = videoGrid.querySelectorAll(".video-card[data-session-id]").length;
+  emptyRemoteStateEl.hidden = remoteCardsCount > 0;
+}
+
+async function ensureConfig() {
+  if (!state.config) {
+    state.config = await api("/api/config");
+  }
+
+  return state.config;
+}
+
+function renderSecureAction() {
+  if (!openSecureBtn) {
+    return;
+  }
+
+  if (window.isSecureContext || !state.config?.httpsEnabled) {
+    openSecureBtn.hidden = true;
+    return;
+  }
+
+  openSecureBtn.hidden = false;
+  openSecureBtn.textContent = `بازکردن نسخه امن روی ${state.config.httpsPort}`;
+}
+
+function setMediaButtonsState() {
+  const audioTracks = state.localStream?.getAudioTracks() || [];
+  const videoTracks = state.localStream?.getVideoTracks() || [];
+
+  toggleAudioBtn.disabled = audioTracks.length === 0;
+  toggleVideoBtn.disabled = videoTracks.length === 0;
+  retryMediaBtn.disabled = false;
+
+  toggleAudioBtn.textContent = audioTracks[0]
+    ? audioTracks[0].enabled
+      ? "قطع میکروفون"
+      : "وصل میکروفون"
+    : "میکروفون ندارد";
+
+  toggleVideoBtn.textContent = videoTracks[0]
+    ? videoTracks[0].enabled
+      ? "قطع دوربین"
+      : "وصل دوربین"
+    : "دوربین ندارد";
+}
+
+function explainMediaError(error, featureName) {
+  if (!window.isSecureContext) {
+    return `${featureName} روی اتصال ناامن HTTP در شبکه داخلی توسط مرورگر مسدود می‌شود. برنامه را با HTTPS محلی باز کنید.`;
+  }
+
+  if (error?.name === "NotAllowedError") {
+    return `دسترسی ${featureName} در مرورگر رد شده است. مجوز دوربین/میکروفون/صفحه را Allow کنید.`;
+  }
+
+  if (error?.name === "NotFoundError") {
+    return `${featureName} پیدا نشد. دوربین، میکروفون یا نمایشگر روی سیستم شناسایی نشده است.`;
+  }
+
+  if (error?.name === "NotReadableError") {
+    return `${featureName} توسط برنامه دیگری در حال استفاده است یا سیستم اجازه دسترسی نمی‌دهد.`;
+  }
+
+  return `خطا در دسترسی به ${featureName}: ${error?.message || "نامشخص"}`;
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: {
+      "Content-Type": "application/json"
+    },
+    ...options
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "خطا در ارتباط با سرور");
+  }
+
+  return data;
+}
+
+function renderParticipants() {
+  participantsListEl.innerHTML = "";
+  participantCountEl.textContent = `${state.participants.length} نفر`;
+
+  if (state.participants.length === 0) {
+    const item = document.createElement("li");
+    item.className = "empty-item";
+    item.textContent = "هنوز شرکت‌کننده‌ای ثبت نشده است.";
+    participantsListEl.appendChild(item);
+    return;
+  }
+
+  state.participants.forEach((participant) => {
+    const item = document.createElement("li");
+    item.textContent =
+      participant.sessionId === state.participant?.sessionId
+        ? `${participant.name} (شما)`
+        : participant.name;
+    participantsListEl.appendChild(item);
+  });
+}
+
+function renderMessages(messages) {
+  messagesEl.innerHTML = "";
+  state.renderedMessageCount = messages.length;
+
+  if (!messages.length) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "message empty";
+    wrapper.textContent = "هنوز پیامی ارسال نشده است. گفتگو را شما شروع کنید.";
+    messagesEl.appendChild(wrapper);
+    return;
+  }
+
+  messages.forEach((message) => appendMessage(message, false));
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function appendMessage(message, scroll = true) {
+  const emptyMessage = messagesEl.querySelector(".message.empty");
+  if (emptyMessage) {
+    emptyMessage.remove();
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "message";
+  const senderEl = document.createElement("strong");
+  senderEl.textContent = message.sender;
+  const textEl = document.createElement("span");
+  textEl.textContent = message.text;
+  wrapper.append(senderEl, textEl);
+  messagesEl.appendChild(wrapper);
+
+  if (scroll) {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+}
+
+function ensureRemoteCard(sessionId, name) {
+  let card = document.querySelector(`[data-session-id="${sessionId}"]`);
+  if (card) {
+    return card.querySelector("video");
+  }
+
+  card = document.createElement("article");
+  card.className = "video-card";
+  card.dataset.sessionId = sessionId;
+  const video = document.createElement("video");
+  video.autoplay = true;
+  video.playsInline = true;
+  const label = document.createElement("div");
+  label.className = "video-label";
+  label.textContent = name;
+  card.append(video, label);
+  videoGrid.appendChild(card);
+  toggleEmptyRemoteState();
+  return card.querySelector("video");
+}
+
+function removeRemoteCard(sessionId) {
+  const card = document.querySelector(`[data-session-id="${sessionId}"]`);
+  if (card) {
+    card.remove();
+  }
+  toggleEmptyRemoteState();
+}
+
+async function setupLocalMedia(replaceActiveStream = false) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setHint("این مرورگر از دسترسی به دوربین و میکروفون پشتیبانی نمی‌کند.");
+    setMediaButtonsState();
+    return;
+  }
+
+  const attempts = [
+    {
+      constraints: { video: true, audio: true },
+      successText: "دوربین و میکروفون آماده است. منتظر سایر کاربران..."
+    },
+    {
+      constraints: { video: false, audio: true },
+      successText: "فقط میکروفون فعال شد؛ جلسه همچنان قابل استفاده است."
+    },
+    {
+      constraints: { video: true, audio: false },
+      successText: "فقط دوربین فعال شد؛ برای صدا می‌توانید چت را هم استفاده کنید."
+    }
+  ];
+
+  let lastError = null;
+
+  for (const attempt of attempts) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
+      if (replaceActiveStream) {
+        replaceOutgoingStream(stream);
+      } else {
+        state.localStream = stream;
+        localVideo.srcObject = state.localStream;
+        setMediaButtonsState();
+      }
+      setHint(attempt.successText);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  state.localStream = null;
+  localVideo.srcObject = null;
+  setMediaButtonsState();
+  if (lastError) {
+    setHint(explainMediaError(lastError, "دوربین و میکروفون"));
+  }
+}
+
+async function flushPendingCandidates(remoteSessionId) {
+  const peer = state.peerConnections.get(remoteSessionId);
+  const queued = state.pendingCandidates.get(remoteSessionId) || [];
+
+  if (!peer?.remoteDescription || queued.length === 0) {
+    return;
+  }
+
+  for (const candidate of queued) {
+    try {
+      await peer.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (error) {
+      console.error("ICE candidate flush error", error);
+    }
+  }
+
+  state.pendingCandidates.delete(remoteSessionId);
+}
+
+function buildPeerConnection(remoteParticipant, shouldInitiate) {
+  if (state.peerConnections.has(remoteParticipant.sessionId)) {
+    return state.peerConnections.get(remoteParticipant.sessionId);
+  }
+
+  const peer = new RTCPeerConnection({
+    iceServers: state.config?.stunPort
+      ? [
+          {
+            urls: [`stun:${location.hostname}:${state.config.stunPort}`]
+          }
+        ]
+      : [],
+    iceCandidatePoolSize: 4
+  });
+
+  if (state.localStream) {
+    state.localStream.getTracks().forEach((track) => {
+      peer.addTrack(track, state.localStream);
+    });
+  }
+
+  peer.ontrack = (event) => {
+    const remoteVideo = ensureRemoteCard(remoteParticipant.sessionId, remoteParticipant.name);
+    remoteVideo.srcObject = event.streams[0];
+  };
+
+  peer.onicecandidate = async (event) => {
+    if (!event.candidate) {
+      return;
+    }
+
+    await sendSignal("ice-candidate", remoteParticipant.sessionId, event.candidate);
+  };
+
+  peer.onconnectionstatechange = () => {
+    if (["disconnected", "failed", "closed"].includes(peer.connectionState)) {
+      if (peer.connectionState === "failed") {
+        setHint(`اتصال رسانه با ${remoteParticipant.name} برقرار نشد. HTTPS و دسترسی LAN را بررسی کنید.`);
+      }
+      peer.close();
+      state.peerConnections.delete(remoteParticipant.sessionId);
+      removeRemoteCard(remoteParticipant.sessionId);
+    }
+  };
+
+  peer.oniceconnectionstatechange = () => {
+    if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") {
+      setHint(`رسانه با ${remoteParticipant.name} متصل شد.`);
+    }
+  };
+
+  state.peerConnections.set(remoteParticipant.sessionId, peer);
+
+  if (shouldInitiate) {
+    createOffer(remoteParticipant.sessionId).catch(console.error);
+  }
+
+  return peer;
+}
+
+async function createOffer(remoteSessionId) {
+  const remoteParticipant = state.participants.find((item) => item.sessionId === remoteSessionId);
+  if (!remoteParticipant) {
+    return;
+  }
+
+  const peer = buildPeerConnection(remoteParticipant, false);
+  if (peer.signalingState !== "stable") {
+    return;
+  }
+
+  const offer = await peer.createOffer();
+  await peer.setLocalDescription(offer);
+  await sendSignal("offer", remoteSessionId, offer);
+}
+
+async function createAnswer(remoteSessionId, offer) {
+  const remoteParticipant = state.participants.find((item) => item.sessionId === remoteSessionId);
+  if (!remoteParticipant) {
+    return;
+  }
+
+  const peer = buildPeerConnection(remoteParticipant, false);
+  await peer.setRemoteDescription(new RTCSessionDescription(offer));
+  await flushPendingCandidates(remoteSessionId);
+  const answer = await peer.createAnswer();
+  await peer.setLocalDescription(answer);
+  await sendSignal("answer", remoteSessionId, answer);
+}
+
+async function handleAnswer(remoteSessionId, answer) {
+  const peer = state.peerConnections.get(remoteSessionId);
+  if (!peer) {
+    return;
+  }
+
+  await peer.setRemoteDescription(new RTCSessionDescription(answer));
+  await flushPendingCandidates(remoteSessionId);
+}
+
+async function handleIceCandidate(remoteSessionId, candidate) {
+  const remoteParticipant = state.participants.find((item) => item.sessionId === remoteSessionId);
+  if (!remoteParticipant) {
+    return;
+  }
+
+  const peer = buildPeerConnection(remoteParticipant, false);
+  if (!peer.remoteDescription) {
+    const queued = state.pendingCandidates.get(remoteSessionId) || [];
+    queued.push(candidate);
+    state.pendingCandidates.set(remoteSessionId, queued.slice(-20));
+    return;
+  }
+
+  try {
+    await peer.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (error) {
+    console.error("ICE candidate error", error);
+  }
+}
+
+async function sendSignal(type, toSessionId, payload) {
+  await api("/api/signals", {
+    method: "POST",
+    body: JSON.stringify({
+      roomCode,
+      type,
+      fromSessionId: state.participant.sessionId,
+      authToken: state.authToken,
+      toSessionId,
+      payload
+    })
+  });
+}
+
+async function pollSignals() {
+  if (!state.joined || !state.participant) {
+    return;
+  }
+
+  try {
+    const data = await api(
+      `/api/signals?roomCode=${encodeURIComponent(roomCode)}&sessionId=${encodeURIComponent(
+        state.participant.sessionId
+      )}&authToken=${encodeURIComponent(state.authToken)}`
+    );
+
+    for (const signal of data.signals) {
+      if (signal.type === "offer") {
+        await createAnswer(signal.fromSessionId, signal.payload);
+      } else if (signal.type === "answer") {
+        await handleAnswer(signal.fromSessionId, signal.payload);
+      } else if (signal.type === "ice-candidate") {
+        await handleIceCandidate(signal.fromSessionId, signal.payload);
+      }
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function refreshRoom() {
+  try {
+    const data = await api(`/api/rooms/detail?roomCode=${encodeURIComponent(roomCode)}`);
+    state.room = data.room;
+    state.participants = data.room.participants || [];
+    roomTitleEl.textContent = data.room.title;
+    roomCodeBadgeEl.textContent = data.room.code;
+    currentUserNameEl.textContent = userName;
+    renderParticipants();
+
+    if (!state.messagesLoaded) {
+      renderMessages(data.messages || []);
+      state.messagesLoaded = true;
+    } else {
+      const messages = data.messages || [];
+      const newMessages = messages.slice(state.renderedMessageCount);
+      newMessages.forEach((message) => appendMessage(message));
+      state.renderedMessageCount = messages.length;
+    }
+
+    const activeRemoteSessions = new Set(
+      state.participants
+        .filter((item) => item.sessionId !== state.participant?.sessionId)
+        .map((item) => item.sessionId)
+    );
+
+    Array.from(state.peerConnections.keys()).forEach((sessionId) => {
+      if (!activeRemoteSessions.has(sessionId)) {
+        state.peerConnections.get(sessionId)?.close();
+        state.peerConnections.delete(sessionId);
+        removeRemoteCard(sessionId);
+      }
+    });
+
+    state.participants.forEach((participant) => {
+      if (participant.sessionId === state.participant?.sessionId) {
+        return;
+      }
+
+      if (!state.peerConnections.has(participant.sessionId)) {
+        const shouldInitiate = state.participant.sessionId > participant.sessionId;
+        buildPeerConnection(participant, shouldInitiate);
+      }
+    });
+
+    toggleEmptyRemoteState();
+  } catch (error) {
+    setHint(error.message);
+  }
+}
+
+async function joinRoom() {
+  const data = await api("/api/rooms/join", {
+    method: "POST",
+    body: JSON.stringify({
+      roomCode,
+      userName
+    })
+  });
+
+  state.room = data.room;
+  state.participant = data.participant;
+  state.authToken = data.authToken || sessionSeed.authToken || "";
+  state.joined = true;
+  state.participants = data.room.participants || [];
+  persistSession();
+  renderParticipants();
+}
+
+function replaceOutgoingStream(stream) {
+  state.localStream?.getTracks().forEach((track) => {
+    if (track.readyState !== "ended") {
+      track.stop();
+    }
+  });
+
+  state.localStream = stream;
+  localVideo.srcObject = stream;
+  setMediaButtonsState();
+
+  state.peerConnections.forEach((peer) => {
+    const senders = peer.getSenders();
+    const videoTrack = stream.getVideoTracks()[0];
+    const audioTrack = stream.getAudioTracks()[0];
+
+    const videoSender = senders.find((sender) => sender.track?.kind === "video");
+    const audioSender = senders.find((sender) => sender.track?.kind === "audio");
+
+    if (videoSender && videoTrack) {
+      videoSender.replaceTrack(videoTrack);
+    } else if (!videoSender && videoTrack) {
+      peer.addTrack(videoTrack, stream);
+    }
+
+    if (audioSender && audioTrack) {
+      audioSender.replaceTrack(audioTrack);
+    } else if (!audioSender && audioTrack) {
+      peer.addTrack(audioTrack, stream);
+    }
+  });
+}
+
+toggleAudioBtn.addEventListener("click", () => {
+  if (!state.localStream) {
+    return;
+  }
+
+  const enabled = !state.localStream.getAudioTracks()[0]?.enabled;
+  state.localStream.getAudioTracks().forEach((track) => {
+    track.enabled = enabled;
+  });
+  toggleAudioBtn.textContent = enabled ? "قطع میکروفون" : "وصل میکروفون";
+});
+
+toggleVideoBtn.addEventListener("click", () => {
+  if (!state.localStream) {
+    return;
+  }
+
+  const enabled = !state.localStream.getVideoTracks()[0]?.enabled;
+  state.localStream.getVideoTracks().forEach((track) => {
+    track.enabled = enabled;
+  });
+  toggleVideoBtn.textContent = enabled ? "قطع دوربین" : "وصل دوربین";
+});
+
+retryMediaBtn.addEventListener("click", async () => {
+  retryMediaBtn.disabled = true;
+  setHint("در حال تلاش دوباره برای فعال‌سازی دوربین و میکروفون...");
+  try {
+    await setupLocalMedia(true);
+  } finally {
+    retryMediaBtn.disabled = false;
+  }
+});
+
+shareScreenBtn.addEventListener("click", async () => {
+  try {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setHint("این مرورگر از اشتراک صفحه پشتیبانی نمی‌کند.");
+      return;
+    }
+
+    if (state.screenStream) {
+      state.screenStream.getTracks().forEach((track) => track.stop());
+      state.screenStream = null;
+      await setupLocalMedia(true);
+      shareScreenBtn.textContent = "اشتراک صفحه";
+      return;
+    }
+
+    state.screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false
+    });
+
+    state.screenStream.getVideoTracks()[0].addEventListener("ended", async () => {
+      state.screenStream = null;
+      await setupLocalMedia(true);
+      shareScreenBtn.textContent = "اشتراک صفحه";
+    });
+
+    replaceOutgoingStream(state.screenStream);
+    shareScreenBtn.textContent = "بازگشت به دوربین";
+  } catch (error) {
+    setHint(explainMediaError(error, "اشتراک صفحه"));
+  }
+});
+
+copyInviteBtn.addEventListener("click", async () => {
+  const inviteText = inviteLinkText.textContent;
+  try {
+    if (!navigator.clipboard?.writeText) {
+      throw new Error("clipboard_unavailable");
+    }
+    await navigator.clipboard.writeText(inviteText);
+    setHint("لینک ورود کپی شد.");
+  } catch (error) {
+    const textArea = document.createElement("textarea");
+    textArea.value = inviteText;
+    textArea.setAttribute("readonly", "true");
+    textArea.className = "copy-fallback";
+    document.body.appendChild(textArea);
+    textArea.select();
+    const copied = document.execCommand("copy");
+    textArea.remove();
+    setHint(copied ? "لینک ورود کپی شد." : "کپی خودکار ممکن نشد. لینک را دستی کپی کنید.");
+  }
+});
+
+chatForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const text = chatInput.value.trim();
+  if (!text) {
+    return;
+  }
+
+  try {
+    await api("/api/messages", {
+      method: "POST",
+      body: JSON.stringify({
+        roomCode,
+        sessionId: state.participant.sessionId,
+        authToken: state.authToken,
+        text
+      })
+    });
+    appendMessage({ sender: userName, text });
+    state.renderedMessageCount += 1;
+    chatInput.value = "";
+  } catch (error) {
+    setHint(error.message);
+  }
+});
+
+leaveBtn.addEventListener("click", async () => {
+  try {
+    if (state.participant) {
+      await api("/api/rooms/leave", {
+        method: "POST",
+        body: JSON.stringify({
+          roomCode,
+          sessionId: state.participant.sessionId,
+          authToken: state.authToken
+        })
+      });
+    }
+  } catch (error) {
+    console.error(error);
+  } finally {
+    clearInterval(state.refreshTimer);
+    clearInterval(state.signalTimer);
+    state.peerConnections.forEach((peer) => peer.close());
+    state.localStream?.getTracks().forEach((track) => track.stop());
+    state.screenStream?.getTracks().forEach((track) => track.stop());
+    window.location.href = "/";
+  }
+});
+
+window.addEventListener("beforeunload", () => {
+  if (!state.participant) {
+    return;
+  }
+
+  navigator.sendBeacon(
+    "/api/rooms/leave",
+    new Blob(
+      [
+        JSON.stringify({
+          roomCode,
+          sessionId: state.participant.sessionId,
+          authToken: state.authToken
+        })
+      ],
+      { type: "application/json" }
+    )
+  );
+});
+
+async function init() {
+  if (!roomCode) {
+    window.location.href = "/";
+    return;
+  }
+
+  await ensureConfig();
+  updateSecureBadge();
+  renderSecureAction();
+  setInviteLink();
+  toggleEmptyRemoteState();
+  roomCodeBadgeEl.textContent = roomCode;
+  currentUserNameEl.textContent = userName;
+
+  if (!window.isSecureContext) {
+    setHint("هشدار: این صفحه با HTTP باز شده و مرورگر ممکن است دوربین، میکروفون و اشتراک صفحه را کاملاً مسدود کند.");
+  }
+
+  await setupLocalMedia();
+  await joinRoom();
+  await refreshRoom();
+  if (!state.localStream) {
+    setHint("بدون رسانه زنده وارد شدید؛ چت فعال است و بعداً می‌توانید مجوز رسانه را بدهید.");
+  }
+
+  state.refreshTimer = setInterval(refreshRoom, 2500);
+  state.signalTimer = setInterval(pollSignals, 1200);
+}
+
+openSecureBtn?.addEventListener("click", () => {
+  if (!state.config?.httpsEnabled) {
+    setHint("نسخه امن روی این سرور فعال نشده است.");
+    return;
+  }
+
+  const secureUrl = `https://${location.hostname}:${state.config.httpsPort}/room.html?code=${encodeURIComponent(roomCode)}&name=${encodeURIComponent(userName)}`;
+  window.location.href = secureUrl;
+});
+
+init().catch((error) => {
+  setHint(error.message);
+});

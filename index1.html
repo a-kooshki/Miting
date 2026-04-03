@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#000" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Graph</title>
+  <style>
+    html , body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      display: flex ; 
+      background-color: #000;
+      overflow: hidden;
+      text-align :center; 
+      font-family: Arial, sans-serif;
+      flex-direction: column;
+      color: white;
+      justify-content: center; 
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 0;
+    }
+    .content {
+      position: relative;
+      z-index: 1;
+    }
+    .content h1 {
+       font-size: 3em;
+       font-weight: bold;
+       margin: 0;
+       font-family: 'Trebuchet MS', Arial, sans-serif;
+       
+    }
+    .content h4 {
+      font-size: 1em;
+      font-family: 'Trebuchet MS', Arial, sans-serif;
+      margin-bottom:15px;
+    }
+    .content button {
+      background-color: transparent;
+      border: 2px solid #000000f1;
+      color:#369B5F;
+      font-family: 'Trebuchet MS', Arial, sans-serif;
+      padding: 9px  20px;
+      font-size: 1.2em;
+      border-radius: 30px;
+      cursor: pointer;
+      transition: 0.3s ease ;
+      margin-bottom: 20px;
+    }
+    .content button:hover {
+      background-color: #369B5F;
+      color: black;
+      transform: scale(1.1);
+      box-shadow : 0 0 15px #369B5F
+    }
+    .custom-cursor {
+      width: 6px;
+      height: 6px;
+      background-color: #369B5F;
+      border-radius: 50%;
+      position: fixed;
+      pointer-events: none;
+      z-index: 3;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 8px #369B5F;
+    }
+    .content p {
+      font-size: 0.7em;
+      font-family: 'Trebuchet MS', Arial, sans-serif;
+      margin-bottom: 20px;
+      color:#369B5F;
+    }
+
+
+  </style>
+</head>
+<body> 
+  <div class="custom-cursor"></div>
+  <div>
+  
+    <canvas id="canvas"></canvas>
+    <div class="content">
+  
+      <h1>Welcome to The G.E.E.K.O</h1>
+      <h4>G-eeky E-fficient E-ncrypted K-nowledge O-ptimaized </h4>
+      <p>Bulit in the ISLAMIC REPUBLIC OF IRAN ,under improvement by ark2geek</p>
+      <button id="enter-button">E2E crypted chat servise</button>
+      
+    </div>
+    <div class="content"><button id="info-button">Graph</button></div>
+    
+    <script> //##############################################backg###################
+
+     
+     
+     
+     
+     let value;
+
+        if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+          value = 150; // موبایل
+        } else {
+          value = 400; // کامپیوتر
+        }
+
+        console.log("Value:", value);
+
+              
+     
+     
+     
+     const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      let particles = [];
+      const mouse = { x: null, y: null };
+
+      window.addEventListener('mousemove', (e) => {
+        mouse.x = e.x;
+        mouse.y = e.y;
+      });
+
+      class Particle {
+        constructor() {
+          this.x = Math.random() * canvas.width;
+          this.y = Math.random() * canvas.height;
+          this.size = Math.random() * 1 + 0.5 ;
+          this.speedX = Math.random()  * 0.6 - 0.3;
+          this.speedY = Math.random()  * 0.6 - 0.3;
+        }
+        update() {
+          this.x += this.speedX;
+          this.y += this.speedY;
+          if (this.x > canvas.width || this.x < 0) this.speedX *= -1;
+          if (this.y > canvas.height || this.y < 0) this.speedY *= -1;
+        }
+        draw() {
+          ctx.fillStyle = '#39ff14';
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function init() {
+        particles = [];
+        for (let i = 0; i < value; i++) {
+          particles.push(new Particle());
+        }
+      }
+
+      function connect() {
+        for (let a = 0; a < particles.length; a++) {
+          for (let b = a; b < particles.length; b++) {
+            const dx = particles[a].x - particles[b].x;
+            const dy = particles[a].y - particles[b].y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 80) {
+              ctx.strokeStyle = '#369B5F';
+              ctx.lineWidth = 0.3;
+              ctx.beginPath();
+              ctx.moveTo(particles[a].x, particles[a].y);
+              ctx.lineTo(particles[b].x, particles[b].y);
+              ctx.stroke();
+            }
+          }
+          const dxMouse = particles[a].x - mouse.x;
+          const dyMouse = particles[a].y - mouse.y;
+          const distMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse);
+          if (distMouse <100) {
+            ctx.strokeStyle = '#369B5F';
+            ctx.lineWidth = 0.4;
+            ctx.beginPath();
+            ctx.moveTo(particles[a].x, particles[a].y);
+            ctx.lineTo(mouse.x, mouse.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+          p.update();
+          p.draw();
+        });
+        connect();
+        requestAnimationFrame(animate);
+      }
+
+      init();
+      animate();
+
+      window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        init();
+      });
+
+      document.getElementById('enter-button').addEventListener('click', () => {
+        window.location.href = '/info.html';
+      });
+      document.getElementById('info-button').addEventListener('click', () => {
+        window.location.href = '/login.html';
+      });
+
+
+    </script>
+    <script>
+      const cursor = document.querySelector('.custom-cursor');
+  
+      document.addEventListener('mousemove', (e) => {
+        cursor.style.left = e.clientX + 'px';
+        cursor.style.top = e.clientY + 'px';
+      });
+   </script>
+  
+  </div>
+</body>
+</html>

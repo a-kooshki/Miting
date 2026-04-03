@@ -1,0 +1,17 @@
+{
+  "name": "local-meeting-app",
+  "version": "1.0.0",
+  "description": "Offline-ready local network meeting app with Node.js, HTML, CSS, and JSON storage.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js"
+  },
+  "keywords": [
+    "meeting",
+    "webrtc",
+    "offline",
+    "lan"
+  ],
+  "license": "UNLICENSED"
+}
